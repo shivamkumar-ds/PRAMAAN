@@ -13,7 +13,7 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 // explicit opt-in via the header toggle, not something that surprises a
 // first-time visitor because their system happens to be in dark mode.
 function getInitialTheme(): Theme {
-  const stored = localStorage.getItem("bidops_theme");
+  const stored = localStorage.getItem("pramaan_theme");
   if (stored === "light" || stored === "dark") return stored;
   return "light";
 }
@@ -23,7 +23,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    localStorage.setItem("bidops_theme", theme);
+    localStorage.setItem("pramaan_theme", theme);
   }, [theme]);
 
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));

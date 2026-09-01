@@ -39,6 +39,13 @@ class ExtractedRequirement(BaseModel):
     description: str | None = None
     mandatory: bool = False
     source_page: int | None = None
+    # Architecture debate Phase 1: only asked of the LLM for requirement_type
+    # in {eligibility, technical, certification, experience} (see
+    # prompts/tender_requirement.py). None for the three deterministically-
+    # classified procedural types, or if the LLM omits/invalidates it --
+    # tender_analyzer._resolve_nature() is what turns this raw, possibly-
+    # absent value into the final persisted RequirementNature.
+    requirement_nature: str | None = None
 
 
 class TenderChunkExtraction(BaseModel):

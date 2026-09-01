@@ -18,14 +18,14 @@ export function FeaturesMegaPanel() {
       <div className="text-center mb-8">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
           <Sparkles size={12} />
-          Powerful features, purpose-built for procurement
+          Powerful features, purpose-built for procurement officers
         </span>
         <h2 className="mt-4 text-2xl lg:text-3xl font-bold tracking-tight leading-[1.1] text-foreground">
-          Everything You Need to Win More Tenders.
+          Everything You Need to Verify Bidders with Confidence.
         </h2>
         <p className="mt-3 text-sm text-muted-foreground leading-relaxed max-w-xl mx-auto">
-          BidOps brings together document intelligence, capability management, compliance automation, and
-          decision intelligence in a single platform designed for modern procurement teams.
+          PRAMAAN brings together AI document extraction, simulated government registry verification, compliance
+          scoring, and officer decision workflows in a single platform designed for procurement officers.
         </p>
       </div>
 

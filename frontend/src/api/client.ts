@@ -10,7 +10,7 @@ export const apiClient = axios.create({
 // localStorage -- this is a plain web app, not a sandboxed artifact, so
 // localStorage is the normal, correct choice here for an MVP.
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("bidops_token");
+  const token = localStorage.getItem("pramaan_token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -23,8 +23,8 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("bidops_token");
-      localStorage.removeItem("bidops_user");
+      localStorage.removeItem("pramaan_token");
+      localStorage.removeItem("pramaan_user");
       if (window.location.pathname !== "/login") {
         window.location.href = "/login";
       }

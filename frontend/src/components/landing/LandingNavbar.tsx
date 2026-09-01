@@ -8,10 +8,11 @@ import { FeaturesMegaPanel } from "./FeaturesMegaPanel";
 import { HowItWorksMegaPanel } from "./HowItWorksMegaPanel";
 
 // Trimmed down per explicit founder direction: only Solutions, Features,
-// How It Works, Pricing, Contact -- Industries, Resources, and About
-// (previously in the nav) are gone. The data arrays for Industries/
-// Resources still exist in landingData.ts in case they come back later,
-// they're just not imported/rendered here anymore.
+// How It Works, Contact -- Pricing (never had a real section behind it,
+// only scrolled to Contact), Industries, Resources, and About (previously
+// in the nav) are gone. The data arrays for Industries/Resources still
+// exist in landingData.ts in case they come back later, they're just not
+// imported/rendered here anymore.
 type DropdownKey = "solutions" | "features" | "how-it-works";
 
 const DROPDOWN_ITEMS: { key: DropdownKey; label: string }[] = [
@@ -21,7 +22,7 @@ const DROPDOWN_ITEMS: { key: DropdownKey; label: string }[] = [
 ];
 
 const DEMO_MAILTO =
-  "mailto:bidops.ai@gmail.com?subject=" + encodeURIComponent("Demo request — BidOps");
+  "mailto:team.pramaan@gmail.com?subject=" + encodeURIComponent("Demo request — PRAMAAN");
 
 function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -92,17 +93,6 @@ export function LandingNavbar() {
           <button
             onClick={() => {
               setActiveKey(null);
-              // No dedicated pricing section exists on the page yet, so
-              // this scrolls to Contact instead of a dead anchor.
-              scrollToId("contact");
-            }}
-            className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-surface-hover"
-          >
-            Pricing
-          </button>
-          <button
-            onClick={() => {
-              setActiveKey(null);
               scrollToId("contact");
             }}
             className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-surface-hover"
@@ -164,17 +154,6 @@ export function LandingNavbar() {
               )}
             </div>
           ))}
-          <button
-            onClick={() => {
-              // No dedicated pricing section exists on the page yet, so
-              // this scrolls to Contact instead of a dead anchor.
-              scrollToId("contact");
-              setMobileOpen(false);
-            }}
-            className="w-full text-left rounded-md px-3 py-2.5 text-sm font-medium text-foreground/90"
-          >
-            Pricing
-          </button>
           <button
             onClick={() => {
               scrollToId("contact");

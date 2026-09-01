@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "../../lib/cn";
 
-type Variant = "primary" | "secondary" | "outline" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "outline" | "ghost" | "danger" | "warning";
 type Size = "sm" | "md" | "lg";
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -18,6 +18,11 @@ const variants: Record<Variant, string> = {
   outline: "border border-border bg-surface text-foreground hover:bg-surface-hover",
   ghost: "text-foreground hover:bg-surface-hover",
   danger: "bg-danger text-danger-foreground hover:opacity-90",
+  // Same soft/border pattern as Badge.tsx's "warning" tone, promoted into
+  // an actual button variant -- for actions that are a real decision
+  // (worth standing out from a plain outline button) but not as
+  // consequential/destructive as danger.
+  warning: "bg-warning-soft text-warning border border-warning/30 hover:bg-warning/20",
 };
 
 const sizes: Record<Size, string> = {

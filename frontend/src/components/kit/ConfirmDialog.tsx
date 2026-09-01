@@ -5,7 +5,7 @@ import { cn } from "../../lib/cn";
 import { Button } from "./Button";
 
 /**
- * BidOps' own confirmation modal -- replaces window.confirm() for
+ * PRAMAAN's own confirmation modal -- replaces window.confirm() for
  * destructive actions (native browser dialogs can't be styled, block the
  * whole tab including any in-flight async state, and give no way to show
  * a "request in progress" state on the destructive button). Deliberately

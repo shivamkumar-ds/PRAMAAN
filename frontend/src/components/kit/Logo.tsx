@@ -20,8 +20,8 @@ export function LogoMark({ size = 28 }: { size?: number }) {
   const gradientId = useId();
 
   return (
-    // aria-hidden: decorative when paired with the "BidOps" wordmark
-    // (Logo, below) that already conveys the same information as text --
+    // aria-hidden: decorative when paired with the wordmark (Logo, below,
+    // now reading "PRAMAAN") that already conveys the same information as text --
     // RC-1 audit finding C1. Where LogoMark is ever used alone with no
     // adjacent text, a caller should add its own aria-label instead.
     <svg
@@ -39,8 +39,15 @@ export function LogoMark({ size = 28 }: { size?: number }) {
         </linearGradient>
       </defs>
       <rect width="32" height="32" rx="8" fill={`url(#${gradientId})`} />
+      {/* "P" glyph (PRAMAAN) -- replaces the old "B" monogram;
+          same badge/sparkle treatment and weight. A full-height stem plus
+          a top bowl, with a genuine counter (hole) punched out of the
+          bowl via evenodd fill-rule so it reads as an open "P" rather
+          than a solid blob. */}
       <path
-        d="M11 7h6.5a4 4 0 0 1 2.2 7.35A4.5 4.5 0 0 1 17.5 23H11V7Zm3 3v4.5h3a2.25 2.25 0 0 0 0-4.5h-3Zm0 7.5V20h3.5a2.25 2.25 0 0 0 0-4.5H14Z"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M11 7h3v16h-3V7Zm3 0h3.5a4 4 0 0 1 0 8H14V7Zm1.6 1.6h1.9a2.4 2.4 0 0 1 0 4.8h-1.9V8.6Z"
         fill="white"
         fillOpacity="0.95"
       />
@@ -58,10 +65,15 @@ export function LogoMark({ size = 28 }: { size?: number }) {
 }
 
 export function Logo({ size = 22, wordmarkClassName = "" }: { size?: number; wordmarkClassName?: string }) {
+  // PRAMAAN (SIH26100 -- AI-Powered Integrated Bid Compliance Verification
+  // Platform for GeM Procurement) is now the primary product surface; the
+  // mark itself is unchanged (still the approved gradient badge), only the
+  // wordmark text changed -- see the product-transformation report for why
+  // a new glyph wasn't warranted for a wordmark-only rebrand.
   return (
     <div className="flex items-center gap-2">
       <LogoMark size={size} />
-      <span className={`font-semibold tracking-tight ${wordmarkClassName}`}>BidOps</span>
+      <span className={`font-semibold tracking-tight ${wordmarkClassName}`}>PRAMAAN</span>
     </div>
   );
 }

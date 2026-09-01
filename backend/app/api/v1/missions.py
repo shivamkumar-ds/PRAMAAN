@@ -12,13 +12,15 @@ import uuid
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_administrator
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.models import Document, Mission, Tender, User
+from app.schemas.bid_readiness import BidReadinessConfirmationRead, ConfirmRequirementRequest
 from app.schemas.decision import RecommendationRead
 from app.schemas.mission import ExecuteMissionRequest, MissionRead
-from app.services import decision_service, mission_service
+from app.schemas.qualification_override import OverrideRequirementRequest, QualificationOverrideRead
+from app.services import bid_readiness_service, decision_service, mission_service, qualification_override_service
 
 router = APIRouter(prefix="/missions", tags=["missions"])
 
@@ -136,3 +138,83 @@ def list_mission_recommendations(
     mission_service.get_mission(db, mission_id, current_user.company_id)  # scoping check
     recommendations = decision_service.get_recommendations_for_mission(db, mission_id)
     return [RecommendationRead.model_validate(r) for r in recommendations]
+
+
+# Bid-readiness confirmation (Path to GO / Action Center). Admin-gated,
+# same require_administrator dependency used for capability delete —
+# confirming "this SUBMISSION_GATING/FUTURE_CONTRACTUAL_COMMITMENT item is
+# actually prepared" is an administrative action on the bid, matching that
+# precedent. See app/services/bid_readiness_service.py for the ownership
+# check (requirement's tender's mission_id must match the path's
+# mission_id, and the mission's company_id must match the authenticated
+# user's company) and app/models/bid_readiness.py for the boundary rule
+# (never affects compute_qualification()).
+@router.post(
+    "/{mission_id}/requirements/{requirement_id}/confirm",
+    response_model=BidReadinessConfirmationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def confirm_requirement(
+    mission_id: uuid.UUID,
+    requirement_id: uuid.UUID,
+    payload: ConfirmRequirementRequest | None = None,
+    current_user: User = Depends(require_administrator),
+    db: Session = Depends(get_db),
+) -> BidReadinessConfirmationRead:
+    note = payload.note if payload else None
+    confirmation = bid_readiness_service.confirm_requirement(
+        db, mission_id, requirement_id, current_user.company_id, current_user.id, note=note
+    )
+    return BidReadinessConfirmationRead.model_validate(confirmation)
+
+
+@router.delete(
+    "/{mission_id}/requirements/{requirement_id}/confirm",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def unconfirm_requirement(
+    mission_id: uuid.UUID,
+    requirement_id: uuid.UUID,
+    current_user: User = Depends(require_administrator),
+    db: Session = Depends(get_db),
+) -> None:
+    bid_readiness_service.unconfirm_requirement(db, mission_id, requirement_id, current_user.company_id)
+
+
+# Qualification override (Action Center). Admin-gated, same
+# require_administrator dependency used for bid-readiness confirmation and
+# capability delete/PATCH. Distinct from confirm/unconfirm above -- see
+# app/models/qualification_override.py's docstring for exactly how this
+# differs (an explicit, audited risk acceptance on a mandatory
+# CAPABILITY_CLAIM qualification gap, not a confirmation of an
+# already-true fact) and app/services/qualification_override_service.py
+# for the ownership check.
+@router.post(
+    "/{mission_id}/requirements/{requirement_id}/override",
+    response_model=QualificationOverrideRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def override_requirement(
+    mission_id: uuid.UUID,
+    requirement_id: uuid.UUID,
+    payload: OverrideRequirementRequest,
+    current_user: User = Depends(require_administrator),
+    db: Session = Depends(get_db),
+) -> QualificationOverrideRead:
+    override = qualification_override_service.override_requirement(
+        db, mission_id, requirement_id, current_user.company_id, current_user.id, note=payload.note
+    )
+    return QualificationOverrideRead.model_validate(override)
+
+
+@router.delete(
+    "/{mission_id}/requirements/{requirement_id}/override",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_qualification_override(
+    mission_id: uuid.UUID,
+    requirement_id: uuid.UUID,
+    current_user: User = Depends(require_administrator),
+    db: Session = Depends(get_db),
+) -> None:
+    qualification_override_service.remove_override(db, mission_id, requirement_id, current_user.company_id)

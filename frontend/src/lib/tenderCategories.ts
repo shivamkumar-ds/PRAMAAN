@@ -5,7 +5,7 @@
 // here as free text (Tender.category), so this list IS the source of
 // truth for what "a category" means today.
 //
-// Sourced from the industries BidOps already claims to serve on the
+// Sourced from the industries PRAMAAN already claims to serve on the
 // marketing site (landingData.ts's solutionVerticals/industries), kept
 // as a single flat list here rather than duplicated across both files.
 export const TENDER_CATEGORIES: string[] = [

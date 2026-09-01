@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -120,3 +121,31 @@ class CapabilityBuildResult(BaseModel):
 
     entity_type: CapabilityEntityType
     entity: CertificationRead | EmployeeRead | ProjectRead
+
+
+class ManualCapabilityCreateRequest(BaseModel):
+    """
+    Request body for POST /capabilities/manual — manual capability
+    creation, no document required. `fields` is intentionally a loose
+    dict[str, Any] (same shape as CapabilityUpdateRequest.fields in
+    app/schemas/revalidation.py, the existing PATCH path) rather than one
+    Pydantic model per entity type: capability_service.build_capability_manual()
+    is the single source of truth for which fields are allowed/required
+    per entity_type (MANUAL_CREATE_FIELDS/MANUAL_REQUIRED_FIELDS), so
+    validation isn't duplicated in two places that could drift apart.
+    """
+
+    entity_type: CapabilityEntityType
+    fields: dict[str, Any]
+
+
+class ManualCapabilityCreateResult(BaseModel):
+    """
+    Response schema for POST /capabilities/manual — covers all five
+    entity types (unlike CapabilityBuildResult, which is deliberately
+    scoped to the three document-extraction MVP types only), since manual
+    creation is the one path that has always supported all five.
+    """
+
+    entity_type: CapabilityEntityType
+    entity: CertificationRead | EmployeeRead | ProjectRead | EquipmentRead | FinancialRecordRead

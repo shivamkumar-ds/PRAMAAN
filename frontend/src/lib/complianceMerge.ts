@@ -31,6 +31,10 @@ export function mergeRequirementContext(matrix: ComplianceMatrixEntryRead[], gap
       // without a second lookup. Existing consumers (Reports.tsx/
       // pdfReport.ts) ignore unknown fields, so this is safe for them.
       reason: gap?.reason ?? null,
+      // Architecture debate Phase 6 -- threaded through purely for display
+      // (a small badge on the Compliance Matrix row); the classification
+      // itself is never re-derived from this, only rendered.
+      requirementNature: gap?.requirement_nature ?? null,
     };
   });
 }

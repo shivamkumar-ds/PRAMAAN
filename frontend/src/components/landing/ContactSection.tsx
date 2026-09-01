@@ -5,12 +5,12 @@ import { extractErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
 import { Button, Input, Select } from "../kit";
 
-// Real, already-established contact channel used everywhere else on the
-// site. Deliberately not inventing a phone number or a registered office
-// address here -- neither exists to publish honestly yet, so those two
-// items from the reference layout are left out rather than fabricated.
-const CONTACT_EMAIL = "bidops.ai@gmail.com";
-const DEMO_MAILTO = "mailto:" + CONTACT_EMAIL + "?subject=" + encodeURIComponent("Demo request — BidOps");
+// Contact channel used everywhere else on the site. Deliberately not
+// inventing a phone number or a registered office address here -- neither
+// exists to publish honestly yet, so those two items from the reference
+// layout are left out rather than fabricated.
+const CONTACT_EMAIL = "team.pramaan@gmail.com";
+const DEMO_MAILTO = "mailto:" + CONTACT_EMAIL + "?subject=" + encodeURIComponent("Demo request — PRAMAAN");
 
 const contactMethods = [
   {
@@ -29,7 +29,7 @@ const contactMethods = [
     title: "Request a Demo",
     body: (
       <div>
-        <p className="text-sm text-muted-foreground">See BidOps in action with a personalized walkthrough.</p>
+        <p className="text-sm text-muted-foreground">See PRAMAAN in action with a personalized walkthrough.</p>
         <a
           href={DEMO_MAILTO}
           className="text-sm font-medium text-primary hover:underline inline-flex items-center gap-1 mt-1"
@@ -103,7 +103,7 @@ export function ContactSection() {
               We're Here to Help
             </h2>
             <p className="mt-3 text-sm text-muted-foreground leading-relaxed max-w-md">
-              Have questions about BidOps? Want to see it in action? Our team is ready to help you make confident
+              Have questions about PRAMAAN? Want to see it in action? Our team is ready to help you make confident
               procurement decisions.
             </p>
 

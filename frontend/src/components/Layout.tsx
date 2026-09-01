@@ -1,32 +1,48 @@
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  ChevronDown,
+  FileSearch,
+  FileText,
+  History,
   LayoutDashboard,
-  FileStack,
-  Layers,
-  FileUp,
-  Radar,
   LogOut,
   Menu as MenuIcon,
-  X,
-  ChevronDown,
-  UserCircle,
   Settings,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  UserCircle,
+  Users,
+  X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { cn } from "../lib/cn";
 import { LiveClock, Logo, Menu, MenuDivider, MenuItem, Switch } from "./kit";
 
-const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/documents", label: "Documents", icon: FileStack },
-  { to: "/capabilities", label: "Capabilities", icon: Layers },
-  { to: "/tenders/new", label: "Upload Tender", icon: FileUp },
-  // Reports retired -- Tender Workspace is now the single place all
-  // tenders live (active and archived, via its status filter), so it's
-  // also the only remaining entry point into a mission's Tender Assessment.
-  { to: "/missions", label: "Tender Workspace", icon: Radar },
+// PRAMAAN is the primary product experience -- the procurement-officer
+// verification workflow (Procurements -> Bidders -> Verification
+// Dashboard). PRAMAAN's own bidder-side self-assessment pages (Tender
+// Workspace, Action Center, Capabilities, Documents, Upload Tender) are
+// deliberately no longer linked from primary navigation: they still exist
+// and still work (see App.tsx's routes, untouched), they're just not part
+// of the PRAMAAN product surface a Procurement Officer should see. See the
+// product-transformation report for the full PRAMAAN-surface classification.
+const navItems = [{ to: "/", label: "Overview", icon: LayoutDashboard }, { to: "/procurement-verification", label: "Procurements", icon: ShieldCheck }];
+
+// Visually present (per the redesign brief's sidebar density target) but
+// genuinely not backed by a route yet -- rendered disabled with a "Soon"
+// pill rather than either being hidden (which would look sparse next to
+// the reference) or linking somewhere fake. The moment a real /bidders,
+// /verification-queue, /findings, /reports (SIH), or /audit-trail route
+// exists, move its entry up into navItems instead of adding a new list.
+const comingSoonNavItems = [
+  { label: "Bidders", icon: Users },
+  { label: "Verification Queue", icon: FileSearch },
+  { label: "Findings", icon: ShieldAlert },
+  { label: "Reports", icon: FileText },
+  { label: "Audit Trail", icon: History },
 ];
 
 export default function Layout() {
@@ -38,7 +54,7 @@ export default function Layout() {
 
   const currentLabel =
     navItems.find((item) => (item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to)))
-      ?.label ?? "BidOps";
+      ?.label ?? "PRAMAAN";
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -50,19 +66,14 @@ export default function Layout() {
       )}
 
       {/* Always `fixed` (never `lg:static`) so `inset-y-0` actually pins it
-          to the viewport height on every screen size. Previously this
-          switched to `static` at the lg breakpoint, which meant the aside
-          became a normal flex child that stretched to match the *main
-          content column's* height instead of the viewport's -- on a tall
-          dashboard, that pushed the bottom of the sidebar (and its nav
-          items) down along with it, off-screen, so it was only reachable
-          by scrolling the whole page.
-          The content column below gets `lg:ml-60` to reserve the space a
-          fixed element doesn't occupy in normal flow. */}
+          to the viewport height on every screen size -- see prior comment
+          history for why. w-64 lg:w-64 keeps the sidebar inside the
+          240-260px band the redesign brief asks for while fitting the
+          denser nav + category list without text wrapping. */}
       <aside
         aria-label="Sidebar"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 lg:w-60 border-r border-border bg-surface flex flex-col shrink-0 transition-transform duration-200 ease-out",
+          "fixed inset-y-0 left-0 z-50 w-64 border-r border-border bg-surface flex flex-col shrink-0 transition-transform duration-200 ease-out",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
@@ -77,30 +88,64 @@ export default function Layout() {
           </button>
         </div>
 
-        <nav aria-label="Main navigation" className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              onClick={() => setMobileOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                  "group flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150",
-                  isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-surface-hover hover:text-foreground hover:translate-x-0.5"
-                )
-              }
-            >
-              <item.icon size={16} strokeWidth={2} />
-              {item.label}
-            </NavLink>
-          ))}
+        <nav aria-label="Main navigation" className="flex-1 px-3 py-4 overflow-y-auto">
+          <div className="space-y-0.5">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === "/"}
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) =>
+                  cn(
+                    "group flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-surface-hover hover:text-foreground hover:translate-x-0.5"
+                  )
+                }
+              >
+                <item.icon size={16} strokeWidth={2} />
+                {item.label}
+              </NavLink>
+            ))}
+
+            {comingSoonNavItems.map((item) => (
+              <div
+                key={item.label}
+                aria-disabled="true"
+                title="Not available yet"
+                className="flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground/60 cursor-not-allowed select-none"
+              >
+                <span className="flex items-center gap-2.5">
+                  <item.icon size={16} strokeWidth={2} />
+                  {item.label}
+                </span>
+                <span className="text-[9px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground rounded px-1.5 py-0.5 shrink-0">
+                  Soon
+                </span>
+              </div>
+            ))}
+          </div>
         </nav>
+
+        {/* Static, non-interactive -- there is no AI-assistant feature/
+            endpoint in the product yet, so this deliberately makes no
+            promises and calls nothing; it exists purely because the
+            redesign brief's reference layout has this element and hiding
+            it would look like a missing chunk of sidebar. */}
+        <div className="p-3 shrink-0 border-t border-border">
+          <div className="rounded-lg bg-primary/5 border border-primary/10 px-3 py-2.5 flex items-center gap-2.5 opacity-70 cursor-not-allowed" title="Coming soon">
+            <Sparkles size={15} className="text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground truncate">AI Assistant</p>
+              <p className="text-[10px] text-muted-foreground truncate">Coming soon</p>
+            </div>
+          </div>
+        </div>
       </aside>
 
-      <div className="flex-1 min-w-0 flex flex-col lg:ml-60">
+      <div className="flex-1 min-w-0 flex flex-col lg:ml-64">
         <header className="h-16 shrink-0 border-b border-border bg-surface flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-30">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -161,7 +206,7 @@ export default function Layout() {
         </header>
 
         <main aria-label={currentLabel} className="flex-1 min-w-0">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
             <Outlet />
           </div>
         </main>

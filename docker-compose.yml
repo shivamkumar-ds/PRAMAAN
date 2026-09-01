@@ -1,0 +1,32 @@
+services:
+  # Dedicated Postgres for PRAMAAN (SIH26100) local development.
+  # Deliberately its own container -- not shared with any other project's
+  # Postgres (e.g. a "aimd_postgres" container from an unrelated
+  # hackathon repo) -- a shared instance across unrelated apps means
+  # mismatched credentials (the exact "password authentication failed
+  # for user bidops" issue hit previously) and no real data isolation
+  # between projects.
+  db:
+    image: postgres:16
+    container_name: pramaan_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pramaan
+      POSTGRES_PASSWORD: pramaan
+      POSTGRES_DB: pramaan
+    ports:
+      # Host port 5433 (not 5432) so this never collides with another
+      # Postgres already bound to 5432 on your Mac (Homebrew or another
+      # project's container) -- backend/.env's DATABASE_URL is set to
+      # match this port.
+      - "5433:5432"
+    volumes:
+      - pramaan_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pramaan -d pramaan"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pramaan_pgdata:

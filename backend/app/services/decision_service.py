@@ -33,7 +33,12 @@ from app.models import (
     Recommendation,
     Tender,
 )
-from app.models.enums import CapabilityEntityType, ComplianceMatrixVerificationStatus, MissionStatus
+from app.models.enums import (
+    CapabilityEntityType,
+    ComplianceMatrixVerificationStatus,
+    MissionStatus,
+    RequirementNature,
+)
 from app.schemas.capability import (
     CertificationRead,
     EmployeeRead,
@@ -119,6 +124,24 @@ async def run_evaluation(
 
     all_entities = capability_service.list_capabilities(db, company_id)
 
+    # Action Center V-next follow-up: "supported domain" used to mean
+    # capability_service.ENTITY_MODELS (only CERTIFICATION/EMPLOYEE/PROJECT
+    # — "has a document-extraction agent"), which predates manual capability
+    # creation. Now that build_capability_manual() writes real rows into
+    # Equipment/FinancialRecord too, "supported for matching" must mean "can
+    # a candidate row of this domain exist at all" (ALL_CAPABILITY_MODELS),
+    # not "can it be auto-extracted from a document." Document-based
+    # building for Equipment/FinancialRecord still doesn't exist — only
+    # manual entry does — but manually-entered ones now correctly count as
+    # real candidates instead of being permanently coverage-gapped. Computed
+    # once here (decision_service already imports capability_service) and
+    # passed into decision_engine.match_requirement() as a plain parameter
+    # rather than importing capability_service into decision_engine.py —
+    # keeps the "reasoning only, no persistence" layering decision_engine.py's
+    # own module docstring states, since capability_service.py is a
+    # stateful, Session-requiring module for every other function on it.
+    supported_domains = set(capability_service.ALL_CAPABILITY_MODELS.keys())
+
     entity_confidences: list[float] = []
     document_ids_cited: set[uuid.UUID] = set()
 
@@ -145,15 +168,26 @@ async def run_evaluation(
     semaphore = asyncio.Semaphore(settings.decision_engine_max_concurrency)
 
     async def _match_one(requirement):
-        if requirement.requirement_type in decision_engine.PROCEDURAL_CATEGORIES:
+        # Architecture debate Phase 2: gate is now requirement_nature, not
+        # requirement_type — see decision_engine.resolve_evaluation_nature()
+        # and build_non_capability_result()'s docstring for why (an EMD or
+        # PPE clause filed under an otherwise-matchable requirement_type
+        # must still skip capability matching entirely; no capability
+        # entity could ever satisfy it).
+        if decision_engine.resolve_evaluation_nature(requirement) != RequirementNature.CAPABILITY_CLAIM:
             candidates = []
         else:
-            domains = decision_engine.CATEGORY_DOMAINS[requirement.requirement_type]
+            # Architecture debate Phase 3: base CATEGORY_DOMAINS mapping
+            # widened (never narrowed) by deterministic keyword hints from
+            # the requirement text — see decision_engine.resolve_candidate_domains().
+            domains = decision_engine.resolve_candidate_domains(requirement)
             candidates = [
                 (entity_type, entity) for entity_type, entity in all_entities if entity_type in domains
             ]
         async with semaphore:
-            result = await decision_engine.match_requirement(requirement, candidates, provider=provider)
+            result = await decision_engine.match_requirement(
+                requirement, candidates, provider=provider, supported_domains=supported_domains
+            )
         return result, candidates
 
     try:
@@ -296,6 +330,38 @@ def get_evaluation(db: Session, mission_id: uuid.UUID, company_id: uuid.UUID) ->
 
 def get_compliance_matrix(db: Session, recommendation_id: uuid.UUID) -> list[ComplianceMatrix]:
     return db.query(ComplianceMatrix).filter(ComplianceMatrix.recommendation_id == recommendation_id).all()
+
+
+def build_remediation_results(
+    compliance_rows: list[ComplianceMatrix], requirements_by_id: dict[uuid.UUID, "Requirement"]
+) -> list[decision_engine.MatchResult]:
+    """
+    Architecture debate Phase 5: reconstructs one MatchResult-equivalent
+    object per ComplianceMatrix row, for the read-time endpoints (GET
+    /evaluation/{mission_id}, GET /recommendations/{mission_id}) that
+    never re-run matching — the real MatchResult objects produced during
+    run_evaluation() are gone from memory by the time a later GET comes
+    in. See decision_engine.reconstruct_match_result() for why this
+    reconstruction is exact, not an approximation.
+
+    capability_service.ALL_CAPABILITY_MODELS is read here (the service
+    layer), not inside decision_engine.py — same layering reasoning as
+    run_evaluation()'s own supported_domains computation above: keeps
+    decision_engine.py free of any import on the stateful,
+    Session-requiring capability_service module. Must stay in lockstep
+    with run_evaluation()'s own supported_domains value (both derive from
+    ALL_CAPABILITY_MODELS now, not just ENTITY_MODELS) — otherwise a
+    persisted ComplianceMatrix row from a live run_evaluation() call could
+    reconstruct with different unsupported_domains than it was actually
+    evaluated with.
+    """
+    supported_domains = set(capability_service.ALL_CAPABILITY_MODELS.keys())
+    return [
+        decision_engine.reconstruct_match_result(
+            requirements_by_id[row.requirement_id], row, supported_domains
+        )
+        for row in compliance_rows
+    ]
 
 
 def get_evaluation_bundle(db: Session, mission_id: uuid.UUID, company_id: uuid.UUID):

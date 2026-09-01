@@ -108,10 +108,21 @@ class Settings(BaseSettings):
     openai_base_url: str | None = None
 
     # OpenAI provider robustness. Same conservative posture as the other
-    # providers — 30s timeout, 3 retries with exponential backoff
+    # providers — 60s timeout, 3 retries with exponential backoff
     # (base 1.0s -> waits of 1s/2s/4s). See llm_client.py's _backoff()
     # docstring for why exponential over fixed.
-    openai_timeout_seconds: float = 30.0
+    #
+    # Raised from the original 30s (Bug #008 investigation, 15 Aug 2026):
+    # a real 30-page government tender's denser chunks (e.g. 5 pages of
+    # dense legal/contract clauses) were timing out against gpt-5.6's
+    # default "medium" reasoning_effort before a response ever came back
+    # -- TCP connect/TLS succeeded instantly every attempt, only the
+    # response itself stalled past 30s. This is a deliberately isolated,
+    # single-variable change (see Bug Bucket) -- reasoning_effort,
+    # chunk size, and retry logic are all left untouched so the effect
+    # of this change alone can be measured before considering anything
+    # else.
+    openai_timeout_seconds: float = 120.0
     openai_max_retries: int = 3
     openai_retry_backoff_seconds: float = 1.0
 
@@ -235,7 +246,7 @@ class Settings(BaseSettings):
     # forgot-password link already use) rather than leaving it unset.
     resend_api_key: str = ""
     contact_sender_email: str = ""
-    contact_notification_email: str = "bidops.ai@gmail.com"
+    contact_notification_email: str = "team.pramaan@gmail.com"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

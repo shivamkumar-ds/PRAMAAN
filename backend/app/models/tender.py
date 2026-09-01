@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.models.enums import CapabilityEntityType, MatchStatus, RequirementType
+from app.models.enums import CapabilityEntityType, MatchStatus, RequirementNature, RequirementType
 from app.models.mixins import UUIDPrimaryKeyMixin
 
 
@@ -66,6 +66,18 @@ class Requirement(Base, UUIDPrimaryKeyMixin):
     # for a requirement extracted from a non-PDF source.
     source_location: Mapped[str | None] = mapped_column(String, nullable=True)
     confidence: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
+    # Architecture debate Phase 1 (see BidOps_Architecture_Debate.md):
+    # orthogonal to requirement_type -- what this requirement actually IS
+    # from a procurement-consequence standpoint, not what surface
+    # category it was filed under. Nullable, no default, no backfill --
+    # every Requirement row that existed before this column was added
+    # reads as NULL and nothing in decision_engine.py/decision_service.py
+    # reads this column yet (deferred to Phase 2). See
+    # RequirementNature's docstring in app/models/enums.py for the four
+    # values and how they're classified.
+    requirement_nature: Mapped[RequirementNature | None] = mapped_column(
+        Enum(RequirementNature, name="requirement_nature"), nullable=True
+    )
 
 
 class CapabilityMapping(Base, UUIDPrimaryKeyMixin):

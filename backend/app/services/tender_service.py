@@ -24,7 +24,7 @@ from app.agents import document_parser, tender_analyzer, tender_metadata_guess
 from app.agents.tender_analyzer import TenderSourceDocument
 from app.core import storage
 from app.models import Document, Mission, Requirement, Tender
-from app.models.enums import DocumentProcessingStatus, MissionStatus, RequirementType
+from app.models.enums import DocumentProcessingStatus, MissionStatus, RequirementNature, RequirementType
 from app.services import document_service
 from app.services.exceptions import ExtractionError, NotFoundError
 
@@ -248,6 +248,11 @@ async def run_analysis(
             source_document_id=result.source_document_id,
             source_location=result.source_location,
             confidence=result.confidence,
+            # Architecture debate Phase 1 -- result.requirement_nature is
+            # always a valid RequirementNature value by this point
+            # (tender_analyzer._resolve_nature() already resolved/fell
+            # back on it), never the LLM's raw, untrusted output.
+            requirement_nature=RequirementNature(result.requirement_nature),
         )
         db.add(requirement)
         requirement_rows.append(requirement)

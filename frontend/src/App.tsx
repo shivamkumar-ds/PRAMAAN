@@ -2,10 +2,12 @@ import { Navigate, Route, BrowserRouter, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { ToastProvider } from "./context/ToastContext";
+import { usePasteSanitizer } from "./lib/usePasteSanitizer";
 import Layout from "./components/Layout";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import ActionCenter from "./pages/ActionCenter";
 import Documents from "./pages/Documents";
 import Capabilities from "./pages/Capabilities";
 import TenderUpload from "./pages/TenderUpload";
@@ -13,6 +15,9 @@ import Missions from "./pages/Missions";
 import Evaluation from "./pages/Evaluation";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
+import ProcurementsList from "./pages/sih/ProcurementsList";
+import ProcurementSubmissions from "./pages/sih/ProcurementSubmissions";
+import BidderVerification from "./pages/sih/BidderVerification";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { isAuthenticated } = useAuth();
@@ -41,6 +46,7 @@ function AppRoutes() {
         }
       >
         <Route path="/" element={<Dashboard />} />
+        <Route path="/action-center" element={<ActionCenter />} />
         <Route path="/documents" element={<Documents />} />
         <Route path="/capabilities" element={<Capabilities />} />
         <Route path="/tenders/new" element={<TenderUpload />} />
@@ -48,6 +54,17 @@ function AppRoutes() {
         <Route path="/missions/:missionId" element={<Evaluation />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
+        {/* SIH26100 -- Procurement Officer bidder-verification workflow.
+            A separate sibling domain from Tender/Requirement/Mission above
+            (see backend Phase 0/1/2 reports); nested routes mirror the
+            product's own drill-down: Procurements -> Bidder Submissions ->
+            Verification Dashboard. */}
+        <Route path="/procurement-verification" element={<ProcurementsList />} />
+        <Route path="/procurement-verification/:procurementId" element={<ProcurementSubmissions />} />
+        <Route
+          path="/procurement-verification/:procurementId/bidders/:submissionId"
+          element={<BidderVerification />}
+        />
         {/* Reports.tsx retired -- it was a strictly smaller, less capable
             duplicate view over the same list_missions() data Tender
             Workspace already fully contains (Tender Workspace already
@@ -65,6 +82,12 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // App-wide: strips leading/trailing whitespace introduced by pasting
+  // clipboard content (very commonly copied out of a tender PDF, which
+  // often carries leading whitespace from list indentation) into any text
+  // field, anywhere -- see usePasteSanitizer.ts's own docstring.
+  usePasteSanitizer();
+
   return (
     <ThemeProvider>
       <ToastProvider>

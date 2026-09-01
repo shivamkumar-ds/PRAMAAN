@@ -31,7 +31,7 @@ declare global {
 }
 
 const FORGOT_PASSWORD_MAILTO =
-  "mailto:bidops.ai@gmail.com?subject=" + encodeURIComponent("Password reset request — BidOps");
+  "mailto:team.pramaan@gmail.com?subject=" + encodeURIComponent("Password reset request — PRAMAAN");
 
 // Standard 4-color "G" mark -- lucide-react has no Google logo, so this is
 // a small inline SVG rather than pulling in a whole icon-pack dependency.
@@ -70,14 +70,14 @@ const loginHighlights = [
   {
     icon: Sparkles,
     color: { bg: "bg-emerald-50", text: "text-emerald-600" },
-    title: "AI-Powered Insights",
-    description: "Extract, match, and evaluate tenders with AI-driven analysis.",
+    title: "AI-Powered Extraction",
+    description: "Extract and normalize bidder documents automatically — always reviewed by an officer before it counts.",
   },
   {
     icon: Users,
     color: { bg: "bg-violet-50", text: "text-violet-600" },
-    title: "Built for Procurement Teams",
-    description: "Collaborate, analyze, and win more tenders together.",
+    title: "Built for Procurement Officers",
+    description: "Verify bidder submissions against simulated government registries with confidence.",
   },
 ];
 
@@ -85,6 +85,7 @@ export default function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const { login } = useAuth();
   const { notify } = useToast();
   const navigate = useNavigate();
@@ -240,7 +241,7 @@ export default function Login() {
               {mode === "login" ? "Welcome Back!" : "Get Started"}
             </h1>
             <p className="mt-2 text-base text-muted-foreground">
-              {mode === "login" ? "Sign in to your BidOps account" : "Register your company to get started"}
+              {mode === "login" ? "Sign in to PRAMAAN" : "Register your organization to get started"}
             </p>
 
             <div className="mt-10 space-y-6">
@@ -362,11 +363,21 @@ export default function Login() {
                   />
                   <Input
                     label="Admin Password"
-                    type="password"
+                    type={showAdminPassword ? "text" : "password"}
                     required
                     minLength={8}
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
+                    trailing={
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPassword((v) => !v)}
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-label={showAdminPassword ? "Hide password" : "Show password"}
+                      >
+                        {showAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    }
                   />
                   <Button type="submit" loading={loading} className="w-full" size="lg">
                     Create workspace
@@ -375,12 +386,12 @@ export default function Login() {
               )}
 
               <p className="text-sm text-center text-muted-foreground mt-6">
-                {mode === "login" ? "New to BidOps? " : "Already registered? "}
+                {mode === "login" ? "New to PRAMAAN? " : "Already registered? "}
                 <button
                   onClick={() => setMode(mode === "login" ? "register" : "login")}
                   className="text-primary font-medium hover:underline"
                 >
-                  {mode === "login" ? "Register your company" : "Sign in"}
+                  {mode === "login" ? "Register your organization" : "Sign in"}
                 </button>
               </p>
             </div>
@@ -390,7 +401,7 @@ export default function Login() {
 
       <footer className="shrink-0 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-xs text-muted-foreground">© 2026 BidOps. All rights reserved.</p>
+          <p className="text-xs text-muted-foreground">© 2026 PRAMAAN. All rights reserved.</p>
         </div>
       </footer>
     </div>

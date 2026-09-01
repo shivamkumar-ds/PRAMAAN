@@ -32,6 +32,7 @@ from app.services.exceptions import (
     NotFoundError,
     UnsupportedFileTypeError,
 )
+from app.services.sih.officer_decision_service import InvalidDecisionError
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,9 @@ _EXCEPTION_STATUS_MAP: list[tuple[type[Exception], int]] = [
     (UnsupportedFileTypeError, 415),
     (FileTooLargeError, 413),
     (AuthenticationError, 401),
+    # SIH26100 (Phase 2) -- a blank note or an invalid decision value is a
+    # client input error, same tier as ExtractionError above.
+    (InvalidDecisionError, 422),
 ]
 
 

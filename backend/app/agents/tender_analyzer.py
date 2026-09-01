@@ -44,6 +44,7 @@ both use cases.
 """
 
 import asyncio
+import logging
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,9 +54,11 @@ from app.agents.json_utils import parse_json_response
 from app.agents.llm_client import get_llm_client
 from app.agents.prompts import tender_requirement
 from app.core.config import get_settings
+from app.models.enums import RequirementNature
 from app.schemas.extraction import ExtractedRequirement, TenderChunkExtraction
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 # Document roles excluded from LLM extraction input — see module
 # docstring. Matches the lowercase role strings tender_service.py
@@ -100,6 +103,58 @@ class RequirementResult:
     source_document_id: uuid.UUID | None
     source_location: str | None
     confidence: float
+    requirement_nature: str  # architecture debate Phase 1 -- see _resolve_nature()
+
+
+# The three requirement_type values that are always PROCEDURAL,
+# deterministically, regardless of what (if anything) the LLM returned
+# for requirement_nature on that row -- see prompts/tender_requirement.py's
+# NATURE_ELIGIBLE_TYPES (the complement of this set) and RequirementNature's
+# docstring in app/models/enums.py.
+_PROCEDURAL_TYPES = {"evaluation_criteria", "deadline", "submission"}
+
+_VALID_ELIGIBLE_NATURES = {
+    RequirementNature.CAPABILITY_CLAIM.value,
+    RequirementNature.SUBMISSION_GATING.value,
+    RequirementNature.FUTURE_CONTRACTUAL_COMMITMENT.value,
+}
+
+
+def _resolve_nature(req: ExtractedRequirement) -> str:
+    """
+    Deterministic resolution of the final, persisted requirement_nature —
+    the LLM's raw (and possibly absent/invalid) requirement_nature is
+    never trusted as-is. Architecture debate Phase 1, see
+    BidOps_Architecture_Debate.md and RequirementNature's docstring.
+
+    1. requirement_type in _PROCEDURAL_TYPES always wins, unconditionally
+       -- even if the LLM incorrectly populated requirement_nature on
+       one of these rows, the deterministic override takes precedence.
+    2. Otherwise, if the LLM returned one of the three valid eligible
+       natures, use it as-is.
+    3. Otherwise (None, empty, garbage, or "procedural" returned for an
+       eligible type) fall back to CAPABILITY_CLAIM -- the fail-safe
+       direction, since it is the nature with the narrowest blast
+       radius downstream (routes through ordinary capability matching,
+       never auto-BLOCKED the way an incorrectly-trusted
+       SUBMISSION_GATING value could). This is a compatibility/fail-safe
+       fallback, not a semantic claim that the requirement was proven to
+       be a capability claim -- logged at WARNING so extraction-quality
+       regressions are observable without a new DB column to track it.
+    """
+    if req.requirement_type in _PROCEDURAL_TYPES:
+        return RequirementNature.PROCEDURAL.value
+
+    if req.requirement_nature in _VALID_ELIGIBLE_NATURES:
+        return req.requirement_nature
+
+    logger.warning(
+        "requirement_nature fallback to CAPABILITY_CLAIM: requirement_type=%r "
+        "returned invalid/missing requirement_nature=%r",
+        req.requirement_type,
+        req.requirement_nature,
+    )
+    return RequirementNature.CAPABILITY_CLAIM.value
 
 
 def _build_source_units(sources: list[TenderSourceDocument]) -> list[SourceUnit]:
@@ -247,4 +302,5 @@ def _to_result(req: ExtractedRequirement, unit_lookup: dict[int, "SourceUnit"]) 
         source_document_id=source_document_id,
         source_location=source_location,
         confidence=confidence,
+        requirement_nature=_resolve_nature(req),
     )

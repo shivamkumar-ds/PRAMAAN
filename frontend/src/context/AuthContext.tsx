@@ -11,7 +11,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function loadStoredUser(): UserRead | null {
-  const raw = localStorage.getItem("bidops_user");
+  const raw = localStorage.getItem("pramaan_user");
   if (!raw) return null;
   try {
     return JSON.parse(raw) as UserRead;
@@ -24,14 +24,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserRead | null>(loadStoredUser());
 
   const login = (token: string, newUser: UserRead) => {
-    localStorage.setItem("bidops_token", token);
-    localStorage.setItem("bidops_user", JSON.stringify(newUser));
+    localStorage.setItem("pramaan_token", token);
+    localStorage.setItem("pramaan_user", JSON.stringify(newUser));
     setUser(newUser);
   };
 
   const logout = () => {
-    localStorage.removeItem("bidops_token");
-    localStorage.removeItem("bidops_user");
+    localStorage.removeItem("pramaan_token");
+    localStorage.removeItem("pramaan_user");
     setUser(null);
   };
 

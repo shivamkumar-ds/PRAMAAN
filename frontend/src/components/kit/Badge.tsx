@@ -20,6 +20,23 @@ const semanticTone: Record<string, Tone> = {
   not_met: "danger", no_go: "danger", critical: "danger", high: "danger", failed: "danger", expired: "danger", verified_non_compliant: "danger",
   running: "info", created: "neutral", awaiting_approval: "warning", archived: "neutral", current: "success",
   mandatory: "neutral",
+  // SIH26100 -- Bidder Verification domain (ComplianceVerificationStatus /
+  // OfficerDecisionType / SubmissionStatus). "verified" and "critical"
+  // already map above and are reused as-is.
+  mismatch: "warning", missing: "warning", critical_fail: "danger", not_applicable: "neutral", not_claimed: "neutral",
+  approve: "success", reject: "danger", request_clarification: "warning",
+  submitted: "neutral", under_review: "info", decided: "success",
+  open: "success", closed: "neutral",
+  // BidderDocument.extraction_status (Phase 4). "pending", "processing",
+  // "review_required", and "failed" already map above via existing keys.
+  extracted: "success",
+  // Synthetic document-row display statuses (Phase 5) -- derived in
+  // BidderVerification.tsx from (extraction_status, is_confirmed), not
+  // real backend enum values: an EXTRACTED-but-unconfirmed document
+  // still needs officer action (warning), a confirmed one is resolved
+  // (success).
+  needs_confirmation: "warning",
+  confirmed: "success",
 };
 
 const statusIcon: Record<string, LucideIcon> = {
@@ -31,6 +48,16 @@ const statusIcon: Record<string, LucideIcon> = {
   review: HelpCircle,
   conditional: AlertCircle,
   conditional_go: AlertCircle,
+  verified: CheckCircle2,
+  mismatch: AlertCircle,
+  missing: HelpCircle,
+  critical_fail: XCircle,
+  approve: CheckCircle2,
+  reject: XCircle,
+  request_clarification: HelpCircle,
+  extracted: CheckCircle2,
+  needs_confirmation: AlertCircle,
+  confirmed: CheckCircle2,
 };
 
 export function Badge({ value, withIcon = false, label }: { value: string; withIcon?: boolean; label?: string }) {

@@ -637,7 +637,7 @@ def test_settings_openai_defaults(monkeypatch):
     settings = Settings(_env_file=None)
     assert settings.llm_provider == "mock"  # every real provider is opt-in; mock is the code default
     assert settings.openai_model == "gpt-5.6"
-    assert settings.openai_timeout_seconds == 30.0
+    assert settings.openai_timeout_seconds == 120.0
     assert settings.openai_max_retries == 3
     assert settings.openai_retry_backoff_seconds == 1.0
     assert settings.openai_base_url is None

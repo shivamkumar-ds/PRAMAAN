@@ -87,6 +87,87 @@ def require_approver(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+_SIH_DECISION_ROLES = (UserRole.ADMINISTRATOR, UserRole.EXECUTIVE, UserRole.REVIEWER, UserRole.BID_MANAGER)
+
+
+def require_sih_decision_role(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Authorization for SIH26100's officer-decision-recording endpoint
+    (POST /sih/submissions/{id}/decision) -- additive to the blanket
+    require_administrator gate every other SIH write endpoint originally
+    used (see app/api/v1/sih.py's module docstring: no dedicated
+    "Procurement Officer" role exists, so Phase 2 mapped every SIH write
+    to Administrator as the smallest-safe default, flagged as
+    revisitable). REVIEWER and BID_MANAGER are the two existing UserRole
+    values whose real-world job (reviewing a bidder's compliance findings
+    and calling approve/reject/request-clarification) matches this
+    specific action, per the PRD's role definitions. EXECUTIVE was added
+    alongside the full 5-role RBAC pass (require_sih_write_role /
+    require_sih_award_role below) -- the PRD's role definitions put
+    Executive at least as senior as Administrator for every SIH action,
+    so an Executive being unable to record a decision while an
+    Administrator can was a gap, not an intentional restriction.
+    Administrator is kept, never removed, so every change here has been
+    purely additive.
+    """
+    if current_user.role not in _SIH_DECISION_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This action requires the Administrator, Executive, Reviewer, or Bid Manager role.",
+        )
+    return current_user
+
+
+def require_sih_write_role(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Authorization for the day-to-day SIH26100 evidence-gathering write
+    endpoints -- upload/extract/confirm a bidder document, run
+    verification (manual or document-driven), upload a tender/requirement
+    document, create/update a procurement/bidder/submission. The one rule
+    that must be airtight here is that AUDITOR is excluded: "read-only
+    auditor" is the entire point of that role existing (per the PRD's
+    role definitions), and before this function existed most of these
+    endpoints only required get_current_user (any authenticated user),
+    which let an Auditor call them -- that gap is what this closes.
+    Every other role (ADMINISTRATOR, EXECUTIVE, REVIEWER, BID_MANAGER) is
+    deliberately allowed -- conservative-by-default per the governing
+    brief: where a finer-grained split isn't clearly called for, prefer
+    not locking out a role that legitimately needs the action.
+    Setting a Procurement's awarded bidder is the one action carved out
+    of this and gated separately by require_sih_award_role, since award
+    decisions are Administrator/Executive-only by design (see
+    app/services/sih/collusion_radar_service.py's repeat-winner
+    indicator, which depends on awarded_bidder_id being set responsibly).
+    """
+    if current_user.role == UserRole.AUDITOR:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Auditors have read-only access to SIH26100 data and cannot perform this action.",
+        )
+    return current_user
+
+
+_SIH_AWARD_ROLES = (UserRole.ADMINISTRATOR, UserRole.EXECUTIVE)
+
+
+def require_sih_award_role(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Authorization for setting a Procurement's awarded bidder
+    (PATCH /sih/procurements/{id}/award) -- narrower than
+    require_sih_write_role: recording who won a procurement is a
+    consequential, officer-facing business decision (and directly feeds
+    the Collusion Radar's repeated-winner indicator), not day-to-day
+    evidence-gathering, so it's scoped to Administrator/Executive only,
+    mirroring require_business_decision_permission's role set above.
+    """
+    if current_user.role not in _SIH_AWARD_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This action requires the Administrator or Executive role.",
+        )
+    return current_user
+
+
 # Permission-shaped authorization for the Bid Decision feature
 # (docs/BID_DECISION_DESIGN.md §7). There is no permissions table in
 # this schema yet, so the permission is backed today by the same flat

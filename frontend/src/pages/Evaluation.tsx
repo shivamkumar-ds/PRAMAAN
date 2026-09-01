@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import {
   addTenderDocument,
   getApprovalHistory,
@@ -20,7 +20,6 @@ import { mergeRequirementContext, type MergedComplianceEntry } from "../lib/comp
 import { tenderDisplayName } from "../lib/tenderName";
 import { forwardLookingGap } from "../lib/forwardLookingGap";
 import { rankBlockers } from "../lib/blockerPriority";
-import { groupBlockersByType } from "../lib/blockerGroups";
 import { assessmentClaim, assessmentConsequence } from "../lib/assessmentCopy";
 import { requirementCategory, REQUIREMENT_CATEGORY_LABELS } from "../lib/requirementCategory";
 import type {
@@ -28,9 +27,13 @@ import type {
   ComplianceMatrixEntryRead,
   DecisionEventRead,
   EvaluationResponse,
+  GapAnalysisEntry,
   MatchStatus,
   MissionRead,
+  QualificationStatus,
+  ReadinessStatus,
   RecommendationRead,
+  RemediationSummary,
   RequirementType,
   TenderWithRequirements,
   UserRole,
@@ -119,6 +122,84 @@ function statusCount(matrix: ComplianceMatrixEntryRead[], status: MatchStatus) {
   return matrix.filter((m) => m.status === status).length;
 }
 
+// Architecture debate Phase 6 -- executive-facing labels over the
+// backend's own remediation_summary.qualification/bid_readiness values.
+// Purely presentational; the values themselves are never recomputed here.
+const QUALIFICATION_COPY: Record<QualificationStatus, string> = {
+  pass: "Pass",
+  conditional: "Conditional",
+  fail: "Fail",
+};
+
+const READINESS_COPY: Record<ReadinessStatus, string> = {
+  ready: "Ready",
+  action_required: "Action Required",
+  blocked: "Blocked",
+};
+
+// One row per remediation_summary bucket that Analysis renders as its own
+// section -- keeps the section list itself data-driven instead of five
+// near-identical hand-written blocks.
+type RemediationSectionKey =
+  | "qualification_gaps"
+  | "blocked_items"
+  | "action_required_items"
+  | "coverage_gaps"
+  | "human_review_items"
+  | "optional_capability_gaps";
+
+const REMEDIATION_SECTIONS: {
+  key: RemediationSectionKey;
+  title: string;
+  emptyCopy: string;
+  note: (count: number) => string;
+}[] = [
+  {
+    key: "qualification_gaps",
+    title: "Qualification Gaps",
+    emptyCopy: "No genuine capability gaps -- every certification/experience/personnel/equipment claim checked out.",
+    note: () => "Capability requirements the company does not currently satisfy.",
+  },
+  {
+    key: "blocked_items",
+    title: "Bid Readiness — Blocked",
+    emptyCopy: "Nothing is blocking submission.",
+    note: () => "Mandatory submission items (e.g. EMD, DSC, portal registration, declarations) still unresolved.",
+  },
+  {
+    key: "action_required_items",
+    title: "Bid Readiness — Action Required",
+    emptyCopy: "No outstanding bid-preparation actions.",
+    note: () => "Routine bid mechanics and future contractual commitments the team needs to act on -- not capability gaps.",
+  },
+  {
+    key: "coverage_gaps",
+    title: "System Coverage Gaps",
+    emptyCopy: "System coverage is complete -- PRAMAAN could evaluate every requirement.",
+    note: () => "PRAMAAN could not fully evaluate these requirements yet. This reflects a system limitation, not a confirmed company deficiency.",
+  },
+  {
+    key: "human_review_items",
+    title: "Human Review",
+    emptyCopy: "Nothing needs human review.",
+    note: () => "Ambiguous evidence on genuine capability requirements -- distinct from a confirmed failure or a coverage limitation.",
+  },
+  {
+    key: "optional_capability_gaps",
+    title: "Optional Capability Gaps",
+    emptyCopy: "No outstanding optional capability items.",
+    // Architecture debate Phase 6 (REVIEW-explainability gap): the one
+    // item shape that can push the overall recommendation to REVIEW while
+    // qualification/bid_readiness/coverage/human_review all look clean --
+    // see api/types.ts's RemediationSummary.optional_capability_gaps
+    // doc comment. Always rendered as a section (like every other bucket
+    // here), not only when recommendation_type is "review", since these
+    // are real facts about the evaluation regardless of whether they
+    // happened to cross the review threshold this time.
+    note: () => "Non-mandatory capability requirements not currently met -- not a qualification risk, but a factor in the overall recommendation.",
+  },
+];
+
 type MergedEntry = MergedComplianceEntry;
 
 // Requirements / AI Recommendation / Decision History -- collapses the
@@ -185,6 +266,13 @@ function roleDefaultSection(role: UserRole | undefined): MissionSection | null {
 
 export default function Evaluation() {
   const { missionId } = useParams<{ missionId: string }>();
+  // Action Center deep-links here as /missions/:id?tab=analysis (etc.) so
+  // "Review requirement" lands directly on the right sub-tab instead of
+  // making the user reselect it. Read-only on mount/navigation -- doesn't
+  // replace `assessmentTab`'s existing local-state model (no writes back
+  // to the URL as the user clicks tabs), so every other entry point into
+  // this page is unaffected.
+  const [searchParams] = useSearchParams();
   const { notify } = useToast();
   const { user } = useAuth();
   const [mission, setMission] = useState<MissionRead | null>(null);
@@ -213,8 +301,10 @@ export default function Evaluation() {
     conditional: false,
     met: false,
   });
-  // Analysis tab -- blocker groups (Why) default collapsed, keyed by
-  // RequirementType. Missing key === collapsed; explicit `true` === open.
+  // Analysis tab -- per-remediation_summary-bucket disclosure state,
+  // keyed by RemediationSectionKey (architecture debate Phase 6, replaces
+  // the old per-RequirementType blocker-group state). Missing key defaults
+  // open when the section has items (see REMEDIATION_SECTIONS rendering).
   // Kept separate from `expanded` above (that one's the Evidence tab's
   // Compliance Matrix status groups -- a different list, different
   // question, deliberately not the same state).
@@ -298,6 +388,18 @@ export default function Evaluation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [missionId]);
 
+  // Applies a deep-linked ?tab= (Action Center's "Review requirement" /
+  // "Open in Tender Workspace" links) once. Only acts on a recognized
+  // AssessmentTab value; any other/missing value leaves the existing
+  // status/role-based default from refresh() untouched.
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && ASSESSMENT_TABS.some((t) => t.value === tab)) {
+      setSection("recommendation");
+      setAssessmentTab(tab as AssessmentTab);
+    }
+  }, [missionId, searchParams]);
+
   // Absorbed from the now-deleted TenderDetail.tsx (Phase 4) -- extracts
   // requirements from the tender document. Stays on the Requirements
   // section; does not switch sections on its own.
@@ -380,27 +482,43 @@ export default function Evaluation() {
     }
   };
 
-  const blockingIssues = useMemo(
-    () => (data?.gap_analysis ?? []).filter((g) => g.mandatory && g.status === "not_met"),
-    [data]
-  );
+  // Architecture debate Phase 6 -- remediation_summary is the single
+  // backend-authoritative classification of every unresolved requirement.
+  // The frontend renders its buckets directly; it does not re-derive its
+  // own notion of "blocker" from gap_analysis/compliance_matrix anymore
+  // (that used to be `mandatory && status === "not_met"`, which conflated
+  // genuine capability failures with missing EMDs and silently dropped
+  // coverage gaps -- exactly the bug this phase exists to fix).
+  const remediation = data?.remediation_summary;
 
-  // docs/TENDER_ASSESSMENT_IMPLEMENTATION_PLAN.md Phase 1/2 -- severity-
-  // ranked view of blockingIssues (Why's "Top Priorities" ordering, and the
-  // Assessment tier's #1-ranked blocker for its consequence sentence). Kept
-  // as its own memo rather than folded into blockingIssues above so the
-  // "what counts as a blocker" logic and "how they're ordered" logic stay
-  // independently readable.
+  // Qualification override disclosure count -- overridden items stay
+  // visible in their original bucket (qualification_gaps/human_review_items)
+  // even after being overridden, per classify_remediation()'s own
+  // docstring, so this is a live count off the same buckets the four-
+  // question ladder already renders, never a separately cached figure.
+  const overriddenGapCount = remediation
+    ? remediation.qualification_gaps.filter((g) => g.overridden).length +
+      remediation.human_review_items.filter((g) => g.overridden).length
+    : 0;
+
+  // "What Would It Take" (Analysis tab) -- a single severity-ranked view
+  // over every item that requires the bid team to *do* something
+  // (qualification gaps, blocked submission items, action-required prep).
+  // Coverage gaps and human-review items are deliberately excluded here:
+  // they get their own framing (system limitation / needs judgment, not
+  // "go fix this") in the sectioned rendering below.
+  const actionableItems = useMemo<GapAnalysisEntry[]>(
+    () => [
+      ...(remediation?.qualification_gaps ?? []),
+      ...(remediation?.blocked_items ?? []),
+      ...(remediation?.action_required_items ?? []),
+    ],
+    [remediation]
+  );
   const rankedBlockers = useMemo(
-    () => rankBlockers(blockingIssues, data?.compliance_matrix ?? []),
-    [blockingIssues, data]
+    () => rankBlockers(actionableItems, data?.compliance_matrix ?? []),
+    [actionableItems, data]
   );
-
-  // docs/TENDER_ASSESSMENT_IMPLEMENTATION_PLAN.md Phase 3 -- Why's grouped,
-  // severity-ranked view of the same blockers. Derived from rankedBlockers
-  // (already severity-sorted) so group order and in-group order both fall
-  // out of that single sort, not a second one.
-  const whyGroups = useMemo(() => groupBlockersByType(rankedBlockers), [rankedBlockers]);
 
   // UI-only readiness indicator, mirroring (not duplicating) the backend's
   // approval_service.get_blocking_rows() rule -- the backend remains the
@@ -805,44 +923,154 @@ export default function Evaluation() {
                         </div>
                       </div>
 
-                      <div className="grid sm:grid-cols-2 gap-5 mt-8 pt-6 border-t border-border">
-                        <div className="flex items-start gap-3">
-                          {blockingIssues.length > 0 ? (
-                            <AlertOctagon size={20} className="text-danger shrink-0 mt-0.5" />
-                          ) : (
-                            <ShieldCheck size={20} className="text-success shrink-0 mt-0.5" />
-                          )}
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Can we bid?</p>
-                            <p className="text-sm font-semibold tracking-tight">
-                              {blockingIssues.length > 0
-                                ? `No — ${blockingIssues.length} mandatory requirement${blockingIssues.length === 1 ? "" : "s"} not met`
-                                : "Yes — every mandatory requirement is met"}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <ShieldQuestion size={20} className="text-muted-foreground shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Should we bid?</p>
-                            {recommendation.risk_level ? (
-                              <p className="text-sm text-foreground/80 leading-relaxed">
-                                Overall risk assessed as{" "}
-                                <span className="font-medium text-foreground">{recommendation.risk_level}</span>, based on{" "}
-                                {blockingIssues.length > 0
-                                  ? `${blockingIssues.length} unresolved mandatory requirement(s).`
-                                  : "no unresolved mandatory requirements."}
-                              </p>
+                      {/* The four-question ladder (architecture debate
+                          Phase 6, §20): Can we qualify? -> Can we submit?
+                          -> Did PRAMAAN fully evaluate everything? -> Does
+                          anything need human judgment? Every value here
+                          comes straight from remediation_summary -- none
+                          of these four questions is answered by
+                          re-deriving anything from gap_analysis or the
+                          compliance matrix. */}
+                      {remediation && (
+                        <div className="grid sm:grid-cols-2 gap-5 mt-8 pt-6 border-t border-border">
+                          <div className="flex items-start gap-3">
+                            {remediation.qualification === "pass" ? (
+                              <ShieldCheck size={20} className="text-success shrink-0 mt-0.5" />
+                            ) : remediation.qualification === "fail" ? (
+                              <AlertOctagon size={20} className="text-danger shrink-0 mt-0.5" />
                             ) : (
-                              <p className="text-sm text-muted-foreground">No risk level was returned for this evaluation.</p>
+                              <ShieldQuestion size={20} className="text-warning shrink-0 mt-0.5" />
                             )}
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Can we qualify?</p>
+                              <p className="text-sm font-semibold tracking-tight">
+                                {QUALIFICATION_COPY[remediation.qualification]}
+                                {remediation.qualification_gaps.length > 0 &&
+                                  ` — ${remediation.qualification_gaps.length} gap${remediation.qualification_gaps.length === 1 ? "" : "s"}`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-3">
+                            {remediation.bid_readiness === "ready" ? (
+                              <ShieldCheck size={20} className="text-success shrink-0 mt-0.5" />
+                            ) : remediation.bid_readiness === "blocked" ? (
+                              <AlertOctagon size={20} className="text-danger shrink-0 mt-0.5" />
+                            ) : (
+                              <ShieldQuestion size={20} className="text-warning shrink-0 mt-0.5" />
+                            )}
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Can we submit?</p>
+                              <p className="text-sm font-semibold tracking-tight">
+                                {READINESS_COPY[remediation.bid_readiness]}
+                                {remediation.blocked_items.length > 0 && ` — ${remediation.blocked_items.length} blocked`}
+                                {remediation.action_required_items.length > 0 &&
+                                  ` · ${remediation.action_required_items.length} action item${remediation.action_required_items.length === 1 ? "" : "s"}`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-3">
+                            {remediation.coverage_gaps.length === 0 ? (
+                              <ShieldCheck size={20} className="text-success shrink-0 mt-0.5" />
+                            ) : (
+                              <ShieldQuestion size={20} className="text-warning shrink-0 mt-0.5" />
+                            )}
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Fully evaluated?</p>
+                              <p className="text-sm font-semibold tracking-tight">
+                                {remediation.coverage_gaps.length === 0
+                                  ? "Yes — system coverage complete"
+                                  : `No — ${remediation.coverage_gaps.length} coverage gap${remediation.coverage_gaps.length === 1 ? "" : "s"}`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-3">
+                            {remediation.human_review_items.length === 0 ? (
+                              <ShieldCheck size={20} className="text-success shrink-0 mt-0.5" />
+                            ) : (
+                              <ShieldQuestion size={20} className="text-warning shrink-0 mt-0.5" />
+                            )}
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Human judgment needed?</p>
+                              <p className="text-sm font-semibold tracking-tight">
+                                {remediation.human_review_items.length === 0
+                                  ? "No"
+                                  : `Yes — ${remediation.human_review_items.length} item${remediation.human_review_items.length === 1 ? "" : "s"}`}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
 
-                      {assessmentConsequence(recommendation.recommendation_type, rankedBlockers[0]) && (
+                      {/* Qualification override disclosure -- never let a
+                          clean-looking "Can we qualify?" verdict silently
+                          absorb an administrator's risk acceptance.
+                          Qualification override items are looked up
+                          directly from qualification_gaps/human_review_items
+                          (the only two buckets decision_engine.
+                          compute_qualification() gates on) -- they stay
+                          visible in those buckets even after being
+                          overridden (classify_remediation()'s own
+                          docstring), so this always reflects the real,
+                          current state, not a cached count. */}
+                      {remediation && overriddenGapCount > 0 && (
+                        <div className="mt-4 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
+                          <span className="inline-flex items-center gap-1.5 font-semibold">
+                            <ShieldCheck size={14} /> {overriddenGapCount} item{overriddenGapCount === 1 ? "" : "s"} passed via
+                            administrator override
+                          </span>
+                          <p className="text-warning/90 mt-1 leading-relaxed">
+                            {overriddenGapCount === 1 ? "This gap does" : "These gaps do"} not have real capability evidence yet
+                            -- an administrator recorded an audited decision to let{" "}
+                            {overriddenGapCount === 1 ? "it" : "them"} not block qualification. See the Analysis tab for who,
+                            when, and why.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* CONDITIONAL_GO must never appear as a vague
+                          standalone label -- always an immediate
+                          breakdown of exactly what's still open. */}
+                      {recommendation.recommendation_type === "conditional_go" && remediation && (
+                        <div className="mt-4 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
+                          <span className="font-semibold">Conditional GO breakdown — </span>
+                          Qualification: {QUALIFICATION_COPY[remediation.qualification]} · Bid Readiness:{" "}
+                          {READINESS_COPY[remediation.bid_readiness]} · Blocked: {remediation.blocked_items.length} · Action
+                          required: {remediation.action_required_items.length} · Coverage gaps:{" "}
+                          {remediation.coverage_gaps.length} · Human review: {remediation.human_review_items.length}
+                        </div>
+                      )}
+
+                      {/* REVIEW must never appear unexplained either --
+                          architecture debate Phase 6 (REVIEW-explainability
+                          gap). REVIEW only ever fires when qualification is
+                          PASS and bid_readiness is READY (see
+                          compute_recommendation_type()'s docstring), which
+                          is exactly the state where the four questions
+                          above would otherwise all read "clean." The
+                          backend-authoritative reason is
+                          optional_capability_gaps: non-mandatory capability
+                          items not currently met, which don't affect
+                          qualification/readiness but do count toward the
+                          review threshold. Rendered directly from that
+                          bucket -- no threshold math performed here. */}
+                      {recommendation.recommendation_type === "review" && remediation && (
+                        <div className="mt-4 rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-sm text-info">
+                          <span className="font-semibold">Why REVIEW — </span>
+                          {remediation.optional_capability_gaps.length > 0
+                            ? `Qualification and bid readiness are both clean, but ${
+                                remediation.optional_capability_gaps.length
+                              } non-mandatory capability item${
+                                remediation.optional_capability_gaps.length === 1 ? "" : "s"
+                              } ${
+                                remediation.optional_capability_gaps.length === 1 ? "isn't" : "aren't"
+                              } currently met -- see Optional Capability Gaps in Analysis.`
+                            : "This reflects a volume of optional items across this evaluation -- see the Analysis tab and Compliance Matrix for the full detail."}
+                        </div>
+                      )}
+
+                      {assessmentConsequence(recommendation.recommendation_type, remediation) && (
                         <p className="text-sm leading-relaxed text-foreground/90 mt-6 pt-6 border-t border-border">
-                          {assessmentConsequence(recommendation.recommendation_type, rankedBlockers[0])}
+                          {assessmentConsequence(recommendation.recommendation_type, remediation)}
                         </p>
                       )}
                     </div>
@@ -860,81 +1088,120 @@ export default function Evaluation() {
                   </div>
                 )}
 
-                {/* Analysis -- Why + What Would It Take together (Phases 3
-                    and 4), unchanged in content and still two distinct
-                    cards (diagnosis vs. prognosis stays a real distinction
-                    per the redesign doc), just no longer sharing the page
-                    with Overview/Decision/Evidence. Blocker groups within
-                    Why now default collapsed -- "Technical -- 7 blockers"
-                    with a count, not nine visible rows -- expanding on
-                    click reveals the individual blockers. Reduces what's
-                    on screen without hiding anything; the group's
-                    consequence line stays visible either way so collapsing
-                    a group doesn't cost the reader its meaning. */}
+                {/* Analysis -- backend-classified remediation_summary
+                    buckets (architecture debate Phase 6), rendered as five
+                    independent sections instead of one client-grouped
+                    "Why" card keyed on requirement_type. Each section is
+                    exactly one remediation_summary array; nothing here
+                    re-decides what belongs in it. Sections default
+                    collapsed once populated -- same "count first, expand
+                    for detail" pattern the old Why groups used, just keyed
+                    by remediation_summary bucket instead of
+                    requirement_type. Coverage gaps and human-review items
+                    each carry their own framing note so neither reads as
+                    an ordinary confirmed failure. */}
                 {assessmentTab === "analysis" && (
                   <div className="space-y-6">
-                    {whyGroups.length > 0 ? (
-                      <Card className="border-danger/30">
-                        <CardHeader
-                          title={
-                            <span className="flex items-center gap-2">
-                              <AlertOctagon size={15} className="text-danger" />
-                              Why
-                            </span>
-                          }
-                          description={`${blockingIssues.length} mandatory requirement(s) not met, top priorities first`}
-                        />
-                        <CardBody className="!py-2 divide-y divide-border -mx-6">
-                          {whyGroups.map((group) => {
-                            const isOpen = expandedBlockerGroups[group.type] ?? false;
-                            return (
-                              <div key={group.type} className="px-6 py-3">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setExpandedBlockerGroups((prev) => ({ ...prev, [group.type]: !isOpen }))
-                                  }
-                                  className="w-full flex items-center justify-between gap-3 text-left"
-                                >
-                                  <span className="flex items-center gap-2">
-                                    <span className="text-sm font-semibold">{group.label}</span>
-                                    <Badge value={group.type} />
-                                  </span>
-                                  <span className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-                                    {group.items.length} blocker{group.items.length === 1 ? "" : "s"}
-                                    <ChevronDown size={14} className={cn("transition-transform", isOpen && "rotate-180")} />
-                                  </span>
-                                </button>
-                                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{group.consequence}</p>
-                                {isOpen && (
-                                  <ul className="divide-y divide-border mt-2 -mx-6 border-t border-border">
-                                    {group.items.map((g) => (
-                                      <li key={g.requirement_id} className="px-6 py-3 text-sm">
-                                        <div className="flex items-start justify-between gap-3">
-                                          <span className="font-medium leading-relaxed">{g.description}</span>
-                                          {g.riskLevel && <Badge value={g.riskLevel} withIcon />}
+                    {remediation &&
+                      REMEDIATION_SECTIONS.map((section) => {
+                        const items = remediation[section.key];
+                        const isOpen = expandedBlockerGroups[section.key] ?? items.length > 0;
+                        if (items.length === 0) {
+                          return (
+                            <Card key={section.key}>
+                              <CardBody>
+                                <p className="text-sm text-muted-foreground">
+                                  <span className="font-medium text-foreground">{section.title}: </span>
+                                  {section.emptyCopy}
+                                </p>
+                              </CardBody>
+                            </Card>
+                          );
+                        }
+                        return (
+                          <Card
+                            key={section.key}
+                            className={
+                              section.key === "qualification_gaps" || section.key === "blocked_items"
+                                ? "border-danger/30"
+                                : section.key === "coverage_gaps" || section.key === "human_review_items"
+                                ? "border-warning/30"
+                                : section.key === "optional_capability_gaps"
+                                ? "border-info/30"
+                                : undefined
+                            }
+                          >
+                            <CardHeader
+                              title={
+                                <span className="flex items-center gap-2">
+                                  <AlertOctagon
+                                    size={15}
+                                    className={
+                                      section.key === "qualification_gaps" || section.key === "blocked_items"
+                                        ? "text-danger"
+                                        : section.key === "optional_capability_gaps"
+                                        ? "text-info"
+                                        : "text-warning"
+                                    }
+                                  />
+                                  {section.title}
+                                </span>
+                              }
+                              description={`${items.length} item${items.length === 1 ? "" : "s"} — ${section.note(items.length)}`}
+                            />
+                            <CardBody className="!py-2 divide-y divide-border -mx-6">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedBlockerGroups((prev) => ({ ...prev, [section.key]: !isOpen }))
+                                }
+                                className="w-full flex items-center justify-between gap-3 px-6 py-2 text-left text-xs font-medium text-muted-foreground"
+                              >
+                                {isOpen ? "Hide items" : "Show items"}
+                                <ChevronDown size={14} className={cn("transition-transform", isOpen && "rotate-180")} />
+                              </button>
+                              {isOpen && (
+                                <ul className="divide-y divide-border">
+                                  {items.map((g) => (
+                                    <li key={g.requirement_id} className="px-6 py-3 text-sm">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <span className="font-medium leading-relaxed">{g.description}</span>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          {g.overridden && (
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning">
+                                              <ShieldCheck size={12} /> Overridden -- Pass
+                                            </span>
+                                          )}
+                                          {g.unsupported_domains.length > 0 && (
+                                            <Badge value={g.unsupported_domains.join(", ")} />
+                                          )}
                                         </div>
-                                        {g.reason && (
-                                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{g.reason}</p>
-                                        )}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </CardBody>
-                      </Card>
-                    ) : (
-                      <Card>
-                        <CardBody>
-                          <p className="text-sm text-muted-foreground">
-                            No mandatory requirements are unmet -- there's nothing blocking this bid to analyze.
-                          </p>
-                        </CardBody>
-                      </Card>
-                    )}
+                                      </div>
+                                      {g.reason && (
+                                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{g.reason}</p>
+                                      )}
+                                      {/* Permanent audit disclosure -- never silently absorbed
+                                          into "requirement met" language, mirrors ActionCenter's
+                                          GapRow override panel exactly. */}
+                                      {g.overridden && (
+                                        <div className="mt-1.5 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5">
+                                          <p className="text-[11px] text-muted-foreground">
+                                            Administrator override -- {g.overridden_by_name ?? "an administrator"}
+                                            {g.overridden_at ? ` · ${new Date(g.overridden_at).toLocaleDateString()}` : ""}
+                                          </p>
+                                          {g.override_note && (
+                                            <p className="text-xs text-foreground mt-0.5 leading-relaxed">"{g.override_note}"</p>
+                                          )}
+                                        </div>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </CardBody>
+                          </Card>
+                        );
+                      })}
 
                     {rankedBlockers.length > 0 && (
                       <Card className="border-primary/20">
@@ -945,7 +1212,7 @@ export default function Evaluation() {
                               What Would It Take
                             </span>
                           }
-                          description="What it would take to clear each mandatory blocker"
+                          description="What it would take to clear each open qualification, blocked, and action-required item"
                         />
                         <CardBody className="!py-2">
                           <ul className="divide-y divide-border -mx-6">
@@ -995,7 +1262,7 @@ export default function Evaluation() {
                       <BusinessDecisionPanel
                         mission={mission}
                         blockingRowCount={blockingRows.length}
-                        mandatoryBlockerCount={blockingIssues.length}
+                        remediation={remediation}
                         recommendation={recommendation}
                         onDecisionRecorded={setMission}
                       />
@@ -1235,6 +1502,11 @@ function MatrixRow({
         <p className="font-medium leading-relaxed pr-2">{entry.heading}</p>
         <div className="flex items-center gap-2 shrink-0">
           {entry.mandatory && <Badge value="mandatory" />}
+          {/* requirement_nature badge (architecture debate Phase 6) --
+              purely additive detail on the authoritative Compliance
+              Matrix; classification itself still lives in
+              remediation_summary above, this is just a label. */}
+          {entry.requirementNature && <Badge value={entry.requirementNature} label={entry.requirementNature.replace(/_/g, " ")} />}
           {entry.risk_level && <Badge value={entry.risk_level} />}
           {entry.matching_confidence != null && (
             <span className="text-xs text-muted-foreground tabular-nums">{Math.round(entry.matching_confidence * 100)}% match</span>
@@ -1352,17 +1624,20 @@ const DECISION_OPTIONS: { value: BusinessDecision; label: string; icon: typeof C
 function BusinessDecisionPanel({
   mission,
   blockingRowCount,
-  mandatoryBlockerCount,
+  remediation,
   recommendation,
   onDecisionRecorded,
 }: {
   mission: MissionRead;
   blockingRowCount: number;
-  // Mandatory-and-not-met count (the "Can we bid?" / "What's Blocking
-  // This Bid" figure) -- distinct from blockingRowCount, which gates on
-  // unverified HIGH/CRITICAL compliance rows. Used only for the recap
-  // below, not for any gating logic (unchanged from before this reorder).
-  mandatoryBlockerCount: number;
+  // Architecture debate Phase 6 -- replaces the old single
+  // mandatoryBlockerCount figure (mandatory && not_met) with the real
+  // backend classification, so the recap can show qualification gaps and
+  // submission blockers as the two genuinely distinct numbers they are,
+  // instead of one blended count. Distinct from blockingRowCount, which
+  // gates on unverified HIGH/CRITICAL compliance rows -- used only for
+  // the recap below, not for any gating logic.
+  remediation: RemediationSummary | undefined;
   recommendation: RecommendationRead;
   onDecisionRecorded: (mission: MissionRead) => void;
 }) {
@@ -1431,20 +1706,30 @@ function BusinessDecisionPanel({
           </div>
         ) : (
           <>
-            {/* Condensed recap -- three lines, no new data, sourced from
-                the recommendation and blocker count already on the page
-                above. So the decision-maker isn't relying on memory of
-                what they read several screens up (docs/
-                TENDER_JOURNEY_DESIGN.md §3). */}
+            {/* Condensed recap -- sourced from the recommendation and
+                remediation_summary already on the page above, so the
+                decision-maker isn't relying on memory of what they read
+                several screens up (docs/TENDER_JOURNEY_DESIGN.md §3).
+                Architecture debate Phase 6: qualification gaps and
+                submission blockers are shown as two distinct figures --
+                never re-blended into one "mandatory blockers" number,
+                since a qualification failure and a missing EMD call for
+                different decisions. */}
             <div className="rounded-md border border-border bg-muted/30 px-3.5 py-3 text-sm space-y-1">
               <p>
                 <span className="text-muted-foreground">Tender Assessment: </span>
                 <span className="font-medium">{recommendationLabel(recommendation.recommendation_type)}</span>
               </p>
               <p>
-                <span className="text-muted-foreground">Mandatory blockers: </span>
+                <span className="text-muted-foreground">Qualification gaps: </span>
                 <span className="font-medium">
-                  {mandatoryBlockerCount === 0 ? "None" : mandatoryBlockerCount}
+                  {!remediation || remediation.qualification_gaps.length === 0 ? "None" : remediation.qualification_gaps.length}
+                </span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Submission blockers: </span>
+                <span className="font-medium">
+                  {!remediation || remediation.blocked_items.length === 0 ? "None" : remediation.blocked_items.length}
                 </span>
               </p>
               <p>
@@ -1489,7 +1774,7 @@ function BusinessDecisionPanel({
               // awaiting_approval (docs/TENDER_JOURNEY_DESIGN.md §4) -- so
               // this statement is literally true, not just emphatic.
               <p className="text-xs text-muted-foreground">
-                This decision is final and cannot be changed within BidOps once saved.
+                This decision is final and cannot be changed within PRAMAAN once saved.
               </p>
             )}
 

@@ -85,6 +85,46 @@ class RequirementType(str, enum.Enum):
     SUBMISSION = "submission"
 
 
+class RequirementNature(str, enum.Enum):
+    """
+    Orthogonal to RequirementType (architecture debate, Phase 1): what a
+    requirement actually IS from a procurement-consequence standpoint,
+    not what surface category the extraction LLM filed it under.
+
+    CAPABILITY_CLAIM: a real evaluator could check this against a
+    company's existing/current evidence (certifications, project
+    history, staff, financial capacity) today.
+
+    SUBMISSION_GATING: a financial instrument or mandatory document that
+    must accompany or precede a valid bid submission -- its absence can
+    make the bid itself invalid/non-responsive (EMD, DSC, portal
+    registration, mandatory declarations/annexures).
+
+    PROCEDURAL: routine bid mechanics -- deterministically assigned from
+    requirement_type in {evaluation_criteria, deadline, submission} (see
+    tender_analyzer._resolve_nature), never classified by the LLM.
+
+    FUTURE_CONTRACTUAL_COMMITMENT: a promise about conduct during
+    contract execution / after award, with no current-state evidence
+    possible (PPE/safety compliance, labour-law compliance, post-award
+    guarantees).
+
+    Classification is by procurement consequence, not grammatical
+    wording -- "shall"/"must"/"submit" do not by themselves determine
+    the answer (see the extraction prompt and _resolve_nature's
+    docstring for the worked examples this was calibrated against).
+
+    Phase 1 only: this field is populated and persisted, but nothing in
+    decision_engine.py / decision_service.py reads it yet -- that is
+    explicitly deferred to Phase 2. See BidOps_Architecture_Debate.md.
+    """
+
+    CAPABILITY_CLAIM = "capability_claim"
+    SUBMISSION_GATING = "submission_gating"
+    PROCEDURAL = "procedural"
+    FUTURE_CONTRACTUAL_COMMITMENT = "future_contractual_commitment"
+
+
 class MatchStatus(str, enum.Enum):
     """Used by both Capability Mapping and Compliance Matrix — same verdict vocabulary."""
 

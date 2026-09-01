@@ -27,6 +27,8 @@ from app.schemas.capability import (
     EmployeeRead,
     EquipmentRead,
     FinancialRecordRead,
+    ManualCapabilityCreateRequest,
+    ManualCapabilityCreateResult,
     ProjectRead,
 )
 from app.schemas.revalidation import CapabilityUpdateRequest, FreshnessSweepResult, RevalidationResult
@@ -110,6 +112,30 @@ GRAPH_BASE_SCHEMAS = {
     CapabilityEntityType.EQUIPMENT: EquipmentRead,
     CapabilityEntityType.FINANCIAL_RECORD: FinancialRecordRead,
 }
+
+
+# Manual capability creation — no document, no LLM extraction. Admin-gated
+# (same require_administrator dependency used for DELETE /capabilities/{id}),
+# supports all five entity types including Equipment and FinancialRecord,
+# which POST /build cannot create (no extraction agent exists for them —
+# see READ_SCHEMAS above, still exactly the three MVP document types).
+# Writes into the same five tables /build uses — same Capability Library,
+# same matching pipeline, no parallel system.
+@router.post("/manual", response_model=ManualCapabilityCreateResult, status_code=status.HTTP_201_CREATED)
+def create_capability_manual(
+    payload: ManualCapabilityCreateRequest,
+    current_user: User = Depends(require_administrator),
+    db: Session = Depends(get_db),
+) -> ManualCapabilityCreateResult:
+    try:
+        entity_type, entity = capability_service.build_capability_manual(
+            db, current_user.company_id, payload.entity_type, payload.fields
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    schema_cls = GRAPH_BASE_SCHEMAS[entity_type]
+    return ManualCapabilityCreateResult(entity_type=entity_type, entity=schema_cls.model_validate(entity))
 
 
 def _to_graph_entry(entity_type: CapabilityEntityType, entity):

@@ -23,9 +23,13 @@ export interface RankedBlocker extends GapAnalysisEntry {
   riskLevel: RiskLevel | null;
 }
 
-// `blockers` is expected to already be the mandatory-and-not-met subset
-// (i.e. what Evaluation.tsx computes as `blockingIssues`) -- this function
-// only ranks, it doesn't decide what counts as a blocker.
+// `blockers` is expected to already be a backend-classified subset --
+// Phase 6 (architecture debate) repoints callers from a client-computed
+// `mandatory && not_met` filter to one of remediation_summary's own
+// buckets (qualification_gaps / blocked_items / action_required_items /
+// etc.). This function only ranks by severity; it never decides what
+// counts as a blocker -- that classification is entirely backend-owned
+// (decision_engine.classify_remediation()).
 export function rankBlockers(blockers: GapAnalysisEntry[], matrix: ComplianceMatrixEntryRead[]): RankedBlocker[] {
   const riskByRequirement = new Map<string, RiskLevel | null>();
   matrix.forEach((row) => riskByRequirement.set(row.requirement_id, row.risk_level));

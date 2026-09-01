@@ -146,11 +146,98 @@ def _generate_decision_match_mock(user_prompt: str) -> str:
     )
 
 
+# Keyword -> category_hint mapping for the mock procurement-requirement
+# extractor below, checked in this order (most specific first) so a line
+# mentioning several terms at once still gets one sensible hint rather
+# than the first alphabetically-registered category. Deliberately the
+# same closed vocabulary procurement_requirements.KNOWN_CATEGORY_CODES
+# declares -- kept as a local literal (not imported) for the same
+# "prompts/mocks have no DB-layer import" reason procurement_requirements.py
+# itself gives.
+_PROCUREMENT_CATEGORY_KEYWORDS: list[tuple[str, list[str]]] = [
+    ("blacklisting", ["blacklist", "debar"]),
+    ("udyam", ["udyam", "msme", "udyog aadhaar"]),
+    ("gst", ["gstin", "gst registration", "goods and services tax"]),
+    ("pan_itr", ["income tax return", "itr filing", "permanent account number", " pan "]),
+    ("mca21", ["cin", "certificate of incorporation", "mca21", "corporate registration"]),
+    ("epfo", ["epfo", "provident fund"]),
+    ("esic", ["esic", "employees' state insurance", "employees state insurance"]),
+    ("startup_india", ["startup india", "dpiit"]),
+    ("nsic", ["nsic"]),
+    ("oem_authorization", ["oem authorization", "manufacturer authorization", "authorised dealer"]),
+    ("digilocker", ["digilocker"]),
+    ("make_in_india", ["make in india", "local content"]),
+]
+
+# Lines with none of the category keywords above are still real
+# eligibility requirements in the mock's demo documents (turnover, years
+# of experience) -- included with category_hint None, exactly matching
+# what the real prompt asks the model to do for a requirement with no
+# registry-backed check.
+_UNCATEGORIZED_ELIGIBILITY_KEYWORDS = ["turnover", "years of experience", "similar work", "annual turnover"]
+
+
+def _generate_procurement_requirements_mock(user_prompt: str) -> str:
+    """
+    Line-by-line keyword scan over the document text embedded in the
+    prompt -- same "genuinely exercise the pipeline against real
+    (if synthetic) document text" philosophy as every other mock in this
+    module, not a fantasy response. A line is treated as one requirement
+    if it contains any recognized eligibility/compliance keyword; its
+    category_hint is the first matching category in
+    _PROCUREMENT_CATEGORY_KEYWORDS (or None for the uncategorized
+    eligibility keywords), and is_mandatory reflects whether the line
+    itself contains mandatory-sounding language ("shall"/"must"/
+    "mandatory"/"required") -- defaulting True otherwise, matching the
+    real prompt's "true unless clearly marked optional" instruction.
+    """
+    text = _extract_document_text(user_prompt)
+    requirements = []
+    seen_texts = set()
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or re.match(r"^\[PAGE \d+\]", line):
+            continue
+        lowered = line.lower()
+
+        category_hint = None
+        for code, keywords in _PROCUREMENT_CATEGORY_KEYWORDS:
+            if any(kw in lowered for kw in keywords):
+                category_hint = code
+                break
+
+        if category_hint is None and not any(kw in lowered for kw in _UNCATEGORIZED_ELIGIBILITY_KEYWORDS):
+            continue
+
+        requirement_text = line.lstrip("-•*").strip()
+        if not requirement_text or requirement_text in seen_texts:
+            continue
+        seen_texts.add(requirement_text)
+
+        is_mandatory = True
+        if re.search(r"\b(optional|preferred|desirable)\b", lowered):
+            is_mandatory = False
+
+        requirements.append(
+            {
+                "requirement_text": requirement_text,
+                "category_hint": category_hint,
+                "is_mandatory": is_mandatory,
+            }
+        )
+
+    return json.dumps({"requirements": requirements})
+
+
 def generate_mock_response(system_prompt: str, user_prompt: str) -> str:
     text = _extract_document_text(user_prompt)
 
     if "REQUIREMENT MATCHING" in system_prompt:
         return _generate_decision_match_mock(user_prompt)
+
+    if "PROCUREMENT ELIGIBILITY REQUIREMENTS" in system_prompt:
+        return _generate_procurement_requirements_mock(user_prompt)
 
     if "TENDER REQUIREMENTS" in system_prompt:
         return _generate_tender_requirements_mock(user_prompt)

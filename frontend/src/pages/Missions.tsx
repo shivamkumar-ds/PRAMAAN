@@ -174,7 +174,13 @@ export default function Missions() {
     try {
       await executeMission(missionId, provider);
       notify("success", "Full analysis complete — recommendation generated.");
-      navigate(`/missions/${missionId}`);
+      // Land on Action Center's "Path to GO" detail view for this mission,
+      // not the raw Evaluation Matrix -- Action Center is now the primary
+      // post-analysis surface (precise, typed, actionable gaps). The
+      // Evaluation Matrix stays fully reachable from there via "Open in
+      // Tender Workspace" / existing nav tabs; this only changes where a
+      // freshly-completed analysis defaults to landing.
+      navigate(`/action-center?mission=${missionId}`);
     } catch (err) {
       notify("error", extractErrorMessage(err));
     } finally {

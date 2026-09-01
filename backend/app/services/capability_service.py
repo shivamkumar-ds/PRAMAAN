@@ -127,6 +127,115 @@ async def build_capability_from_document(
     return entity_type, entity
 
 
+# --- Manual capability creation (no document, no LLM extraction). Writes
+# into the exact same five tables build_capability_from_document() uses —
+# same Capability Library, same matching pipeline, no parallel system.
+# Deliberately keyed off ALL_CAPABILITY_MODELS (all five domains), NOT
+# ENTITY_MODELS above — ENTITY_MODELS is specifically "which domains have
+# a document-extraction agent" and stays exactly as-is (three entries);
+# manual entry is a completely separate creation path that has never
+# required an extraction agent, so it covers all five domains including
+# Equipment and FinancialRecord, which have had zero creation path until
+# now. This deliberately does NOT change EvaluationCoverage/
+# decision_engine.get_evaluation_coverage()'s notion of "supported
+# domains" (still == ENTITY_MODELS.keys(), i.e. document-extraction
+# coverage only) — that is a distinct concept from "can a capability
+# record of this type exist at all," and conflating the two here would
+# silently change decision_engine.py's coverage-gap behavior as a side
+# effect of an unrelated feature. ---
+
+# Required fields per entity type for manual creation — mirrors each
+# model's own NOT NULL columns (app/models/capability.py) PLUS one
+# additional business rule: financial_year is not a NOT NULL DB column,
+# but is required here anyway. Reasoning (found via a real user report —
+# a manually-created FinancialRecord with every field except
+# financial_year filled in can never satisfy a year-specific eligibility
+# requirement like "attach Income Tax Returns for the three years ending
+# 31.03.2026", since match_requirement() has no year to reason about and
+# correctly refuses to credit an undated record — the requirement stays
+# NOT_MET even though a capability record exists, which looks like a bug
+# from the outside but is actually the matcher being honest about
+# genuinely unverifiable evidence. Making financial_year required at
+# creation time prevents entering data that can structurally never
+# resolve a year-specific gap. Project remains the only type with no
+# required domain field beyond what CapabilityMetadataMixin provides.
+MANUAL_REQUIRED_FIELDS: dict[CapabilityEntityType, set[str]] = {
+    CapabilityEntityType.CERTIFICATION: {"certification_name"},
+    CapabilityEntityType.EMPLOYEE: {"name"},
+    CapabilityEntityType.PROJECT: set(),
+    CapabilityEntityType.EQUIPMENT: {"equipment_name"},
+    CapabilityEntityType.FINANCIAL_RECORD: {"financial_year"},
+}
+
+# Settable fields per entity type for manual creation — every real domain
+# column on that entity's model (excludes the CapabilityMetadataMixin
+# fields, which manual creation never lets the caller set directly: no
+# source_document_id since there's no document, confidence_score stays
+# None, verification_status stays PENDING — same "never auto-verified"
+# rule build_capability_from_document already follows).
+MANUAL_CREATE_FIELDS: dict[CapabilityEntityType, set[str]] = {
+    CapabilityEntityType.CERTIFICATION: {
+        "certification_name", "issuing_authority", "issue_date", "expiry_date", "status",
+    },
+    CapabilityEntityType.EMPLOYEE: {
+        "name", "position", "qualification", "experience", "availability", "skills",
+    },
+    CapabilityEntityType.PROJECT: {
+        "client", "industry", "contract_value", "duration", "completion_status", "similarity_tags",
+    },
+    CapabilityEntityType.EQUIPMENT: {
+        "equipment_name", "category", "quantity", "availability", "specifications",
+    },
+    CapabilityEntityType.FINANCIAL_RECORD: {
+        "financial_year", "revenue", "net_worth", "working_capital", "credit_rating",
+    },
+}
+
+
+def build_capability_manual(
+    db: Session, company_id: uuid.UUID, entity_type: CapabilityEntityType, fields: dict
+):
+    """
+    Creates one capability entity directly from caller-supplied fields —
+    no Document, no LLM extraction. Raises ValueError (mapped to 422 by
+    the router, same convention as capability_service's PATCH path) for
+    an unknown field name or a missing required field; both are caller
+    input errors, not domain/persistence failures.
+
+    verification_status stays at the model's own PENDING default (never
+    auto-verified, matching build_capability_from_document's explicit
+    comment) — VerificationStatus (app/models/enums.py) has no member
+    that distinguishes "human-entered" from "AI-extracted" today; adding
+    one was considered out of scope for this change (see the manual
+    capability creation completion report) and flagged as a possible
+    follow-up rather than invented here.
+    """
+    allowed = MANUAL_CREATE_FIELDS[entity_type]
+    unknown = set(fields.keys()) - allowed
+    if unknown:
+        raise ValueError(f"Field(s) not settable for {entity_type.value}: {', '.join(sorted(unknown))}")
+
+    required = MANUAL_REQUIRED_FIELDS[entity_type]
+    provided_non_empty = {k for k, v in fields.items() if v not in (None, "")}
+    missing = required - provided_non_empty
+    if missing:
+        raise ValueError(f"Missing required field(s) for {entity_type.value}: {', '.join(sorted(missing))}")
+
+    prepared = _prepare_fields(fields)
+    model_cls = ALL_CAPABILITY_MODELS[entity_type]
+    entity = model_cls(
+        company_id=company_id,
+        confidence_score=None,
+        source_document_id=None,
+        verification_status=VerificationStatus.PENDING,
+        **prepared,
+    )
+    db.add(entity)
+    db.commit()
+    db.refresh(entity)
+    return entity_type, entity
+
+
 def _prepare_fields(fields: dict) -> dict:
     prepared = dict(fields)
     for field_name in DATE_FIELDS:
@@ -189,6 +298,22 @@ PATCHABLE_FIELDS = {
     },
     CapabilityEntityType.PROJECT: {
         "client", "industry", "contract_value", "duration", "completion_status", "similarity_tags",
+    },
+    # Equipment/FinancialRecord were left out of the original M9 PATCH
+    # rollout (predates manual creation, when neither type had any
+    # creation path at all -- see build_capability_manual's own comment).
+    # Added here for a real user-reported case: a manually-created
+    # FinancialRecord submitted before financial_year became a required
+    # field (see MANUAL_REQUIRED_FIELDS above) has no way to be corrected
+    # in place -- PATCH /capabilities/{id} already exists and is fully
+    # entity-type-agnostic (revalidation_service.handle_capability_update
+    # doesn't branch on entity_type), so this is just closing a field
+    # whitelist gap, not new plumbing.
+    CapabilityEntityType.EQUIPMENT: {
+        "equipment_name", "category", "quantity", "availability", "specifications",
+    },
+    CapabilityEntityType.FINANCIAL_RECORD: {
+        "financial_year", "revenue", "net_worth", "working_capital", "credit_rating",
     },
 }
 

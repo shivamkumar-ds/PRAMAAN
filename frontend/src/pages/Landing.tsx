@@ -5,18 +5,18 @@ import { DashboardPreview } from "../components/landing/DashboardPreview";
 import { ContactSection } from "../components/landing/ContactSection";
 import { trustStatements } from "../components/landing/landingData";
 
-const DEMO_MAILTO = "mailto:bidops.ai@gmail.com?subject=" + encodeURIComponent("Demo request — BidOps");
+const DEMO_MAILTO = "mailto:team.pramaan@gmail.com?subject=" + encodeURIComponent("Demo request — PRAMAAN");
 
 const pills = [
-  { icon: FileSearch, title: "AI Requirement Extraction", description: "Automatically extract tender requirements using AI." },
-  { icon: Layers, title: "Capability Intelligence", description: "Build a reusable capability library from company documents." },
-  { icon: ShieldCheck, title: "Evidence-backed Decisions", description: "Every recommendation links directly to supporting evidence." },
-  { icon: FileBarChart2, title: "Executive Reports", description: "Export an executive-ready Tender Assessment PDF in minutes." },
+  { icon: FileSearch, title: "AI Document Extraction", description: "Automatically extract bidder identity and registration data from uploaded documents." },
+  { icon: Layers, title: "12 Verification Categories", description: "Udyam, GST, PAN, MCA21, EPFO, ESIC, NSIC, Startup India, OEM Auth, DigiLocker, Make in India, Blacklist." },
+  { icon: ShieldCheck, title: "Simulated Registry Verification", description: "Cross-checks every claim against mock government registry records — no live portals are queried." },
+  { icon: FileBarChart2, title: "Compliance Score & Risk Level", description: "A transparent, explainable score with Low / Medium / High / Critical risk flags for every bidder." },
 ];
 
 const footerLinks = {
   Company: [{ label: "About", id: "company" }, { label: "Contact", id: "contact" }],
-  Product: [{ label: "Solutions" }, { label: "Features" }, { label: "Industries" }],
+  Product: [{ label: "Solutions" }, { label: "Features" }, { label: "How It Works" }],
   Resources: [{ label: "Documentation" }, { label: "FAQ" }, { label: "Release Notes" }],
 };
 
@@ -42,7 +42,7 @@ export default function Landing() {
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
               <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-              AI-Powered Procurement Intelligence
+              AI-Powered Bid Compliance Verification
             </span>
 
             <h1 className="mt-4 text-4xl sm:text-5xl lg:text-[3.3rem] font-bold tracking-tight leading-[1.06] text-foreground">
@@ -50,12 +50,13 @@ export default function Landing() {
               <br />
               to Decisions.
               <br />
-              <span className="text-primary">Organize. Analyze. Automate.</span>
+              <span className="text-primary">Verify. Score. Decide.</span>
             </h1>
 
             <p className="mt-4 text-base text-muted-foreground leading-relaxed max-w-xl">
-              BidOps helps procurement teams analyze tender documents, build organizational capabilities, evaluate
-              compliance, and generate explainable bid recommendations — all from a single enterprise workspace.
+              PRAMAAN helps procurement officers verify bidder submissions against simulated government registries —
+              Udyam, GST, PAN, MCA21, EPFO, ESIC, and more — with a transparent compliance score, risk level, and a
+              fully auditable decision trail.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -65,11 +66,11 @@ export default function Landing() {
             </div>
 
             <p className="mt-4 text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span>Enterprise-Grade Security</span>
+              <span>Simulated Government Registries</span>
               <span aria-hidden="true">•</span>
-              <span>Explainable AI Decisions</span>
+              <span>Explainable Verification</span>
               <span aria-hidden="true">•</span>
-              <span>Built for Procurement Teams</span>
+              <span>Built for Procurement Officers</span>
             </p>
           </div>
 
@@ -128,8 +129,9 @@ export default function Landing() {
             <div>
               <Logo size={22} />
               <p className="text-sm text-muted-foreground mt-3 leading-relaxed max-w-xs">
-                BidOps is the end-to-end platform that helps procurement teams discover the right tenders, analyze
-                complex documents, build capabilities, and generate compliant bids with confidence.
+                PRAMAAN is the bid compliance verification platform that helps procurement officers verify bidder
+                submissions against simulated government registries, score compliance, and record auditable
+                decisions with confidence.
               </p>
             </div>
 
@@ -157,7 +159,7 @@ export default function Landing() {
           </div>
 
           <div className="mt-12 pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-muted-foreground">© 2026 BidOps. All rights reserved.</p>
+            <p className="text-xs text-muted-foreground">© 2026 PRAMAAN. All rights reserved.</p>
             <div className="flex items-center gap-5">
               <span className="text-xs text-muted-foreground">Privacy Policy</span>
               <span className="text-xs text-muted-foreground">Terms</span>
