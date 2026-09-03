@@ -1,5 +1,13 @@
 # BidOps
 
+## Live Demo
+
+- **App:** [parmaan-chi.vercel.app](https://parmaan-chi.vercel.app/)
+- **Login:** `admin@test.in` / `password`
+- **Demo video:** [Watch on Google Drive](https://drive.google.com/file/d/1_mB4YNETORpYcEpJO48OMBsl4SranAKF/view?usp=sharing)
+
+> Demo credentials only — for evaluation purposes, not a production account.
+
 Enterprise procurement decision-intelligence platform. Reads a tender, cross-references it
 against an organization's own capability evidence, and returns a structured, evidence-backed
 Proceed / Do Not Proceed / Conditional recommendation — not a document summary, not a chat
